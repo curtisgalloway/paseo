@@ -336,7 +336,7 @@ describe("convertClaudeHistoryEntry", () => {
     expect(convertClaudeHistoryEntry(entry, () => [])).toEqual([
       {
         type: "tool_call",
-        callId: "task_notification_bg-fail-1",
+        callId: "task_notification_task-note-system-1",
         name: "task_notification",
         status: "failed",
         error: { message: "Background task failed" },
@@ -375,7 +375,7 @@ describe("convertClaudeHistoryEntry", () => {
     expect(convertClaudeHistoryEntry(entry, () => [])).toEqual([
       {
         type: "tool_call",
-        callId: "task_notification_bg-queue-1",
+        callId: "task_notification_task-note-queue-1",
         name: "task_notification",
         status: "completed",
         error: null,

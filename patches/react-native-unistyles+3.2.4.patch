@@ -1,5 +1,42 @@
+diff --git a/node_modules/react-native-unistyles/android/build.gradle b/node_modules/react-native-unistyles/android/build.gradle
+index 195954b..c4ac28c 100644
+--- a/node_modules/react-native-unistyles/android/build.gradle
++++ b/node_modules/react-native-unistyles/android/build.gradle
+@@ -38,6 +38,7 @@ if (isNewArchitectureEnabled()) {
+ 
+ android {
+     compileSdkVersion safeExtGet('compileSdkVersion', 35)
++    ndkVersion safeExtGet('ndkVersion', '27.1.12297006')
+     namespace "com.unistyles"
+ 
+     defaultConfig {
+diff --git a/node_modules/react-native-unistyles/lib/commonjs/core/withUnistyles/withUnistyles.js b/node_modules/react-native-unistyles/lib/commonjs/core/withUnistyles/withUnistyles.js
+index 5a0d049..ef1e59f 100644
+--- a/node_modules/react-native-unistyles/lib/commonjs/core/withUnistyles/withUnistyles.js
++++ b/node_modules/react-native-unistyles/lib/commonjs/core/withUnistyles/withUnistyles.js
+@@ -18,6 +18,11 @@ function _interopRequireWildcard(e, t) { if ("function" == typeof WeakMap) var r
+ const withUnistyles = (Component, mappings) => {
+   return /*#__PURE__*/(0, _react.forwardRef)((props, ref) => {
+     const narrowedProps = props;
++    // uniProps is consumed here; forwarding it leaks an unknown prop onto DOM elements on web.
++    const {
++      uniProps: _uniProps,
++      ...forwardedProps
++    } = props;
+     const styleClassNames = (0, _getClassname.getClassName)(narrowedProps.style, true);
+     const contentContainerStyleClassNames = (0, _getClassname.getClassName)(narrowedProps.contentContainerStyle);
+     const {
+@@ -34,7 +39,7 @@ const withUnistyles = (Component, mappings) => {
+     } = narrowedProps.uniProps ? narrowedProps.uniProps(proxifiedTheme, proxifiedRuntime) : {};
+     const emptyStyles = narrowedProps.style ? Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(narrowedProps.style)).filter(([key]) => !key.startsWith('unistyles') && !key.startsWith('_')).map(([key]) => [key, undefined])) : undefined;
+     const combinedProps = {
+-      ...(0, _utils.deepMergeObjects)(mappingsProps, unistyleProps, props),
++      ...(0, _utils.deepMergeObjects)(mappingsProps, unistyleProps, forwardedProps),
+       ...(narrowedProps.style ? {
+         // Override default component styles with undefined values to reset them
+         style: emptyStyles
 diff --git a/node_modules/react-native-unistyles/lib/commonjs/web/registry.js b/node_modules/react-native-unistyles/lib/commonjs/web/registry.js
-index 120ff60..d1ff102 100644
+index 120ff60..5e724b2 100644
 --- a/node_modules/react-native-unistyles/lib/commonjs/web/registry.js
 +++ b/node_modules/react-native-unistyles/lib/commonjs/web/registry.js
 @@ -10,6 +10,17 @@ class UnistylesRegistry {
@@ -97,8 +134,33 @@ index 120ff60..d1ff102 100644
      this.stylesCache.clear();
      this.dependenciesMap.clear();
      this.disposeListenersMap.clear();
+diff --git a/node_modules/react-native-unistyles/lib/module/core/withUnistyles/withUnistyles.js b/node_modules/react-native-unistyles/lib/module/core/withUnistyles/withUnistyles.js
+index 5904a73..084991c 100644
+--- a/node_modules/react-native-unistyles/lib/module/core/withUnistyles/withUnistyles.js
++++ b/node_modules/react-native-unistyles/lib/module/core/withUnistyles/withUnistyles.js
+@@ -13,6 +13,11 @@ import { jsx as _jsx } from "react/jsx-runtime";
+ export const withUnistyles = (Component, mappings) => {
+   return /*#__PURE__*/forwardRef((props, ref) => {
+     const narrowedProps = props;
++    // uniProps is consumed here; forwarding it leaks an unknown prop onto DOM elements on web.
++    const {
++      uniProps: _uniProps,
++      ...forwardedProps
++    } = props;
+     const styleClassNames = getClassName(narrowedProps.style, true);
+     const contentContainerStyleClassNames = getClassName(narrowedProps.contentContainerStyle);
+     const {
+@@ -29,7 +34,7 @@ export const withUnistyles = (Component, mappings) => {
+     } = narrowedProps.uniProps ? narrowedProps.uniProps(proxifiedTheme, proxifiedRuntime) : {};
+     const emptyStyles = narrowedProps.style ? Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(narrowedProps.style)).filter(([key]) => !key.startsWith('unistyles') && !key.startsWith('_')).map(([key]) => [key, undefined])) : undefined;
+     const combinedProps = {
+-      ...deepMergeObjects(mappingsProps, unistyleProps, props),
++      ...deepMergeObjects(mappingsProps, unistyleProps, forwardedProps),
+       ...(narrowedProps.style ? {
+         // Override default component styles with undefined values to reset them
+         style: emptyStyles
 diff --git a/node_modules/react-native-unistyles/lib/module/web/registry.js b/node_modules/react-native-unistyles/lib/module/web/registry.js
-index 6362f43..8e769f8 100644
+index 6362f43..31e3190 100644
 --- a/node_modules/react-native-unistyles/lib/module/web/registry.js
 +++ b/node_modules/react-native-unistyles/lib/module/web/registry.js
 @@ -6,6 +6,17 @@ export class UnistylesRegistry {
@@ -196,6 +258,28 @@ index 6362f43..8e769f8 100644
      this.stylesCache.clear();
      this.dependenciesMap.clear();
      this.disposeListenersMap.clear();
+diff --git a/node_modules/react-native-unistyles/src/core/withUnistyles/withUnistyles.tsx b/node_modules/react-native-unistyles/src/core/withUnistyles/withUnistyles.tsx
+index e347b7a..77514a4 100644
+--- a/node_modules/react-native-unistyles/src/core/withUnistyles/withUnistyles.tsx
++++ b/node_modules/react-native-unistyles/src/core/withUnistyles/withUnistyles.tsx
+@@ -28,6 +28,8 @@ export const withUnistyles = <TComponent, TMappings extends GenericComponentProp
+ 
+     return forwardRef<GenericComponentRef<TComponent>, PropsWithUnistyles>((props, ref) => {
+         const narrowedProps = props as PropsWithUnistyles & UnistyleStyles
++        // uniProps is consumed here; forwarding it leaks an unknown prop onto DOM elements on web.
++        const { uniProps: _uniProps, ...forwardedProps } = props
+         const styleClassNames = getClassName(narrowedProps.style, true)
+         const contentContainerStyleClassNames = getClassName(narrowedProps.contentContainerStyle)
+         const { proxifiedRuntime, proxifiedTheme } = useProxifiedUnistyles()
+@@ -46,7 +48,7 @@ export const withUnistyles = <TComponent, TMappings extends GenericComponentProp
+             : undefined
+ 
+         const combinedProps = {
+-            ...deepMergeObjects(mappingsProps, unistyleProps, props),
++            ...deepMergeObjects(mappingsProps, unistyleProps, forwardedProps),
+             ...(narrowedProps.style
+                 ? {
+                       // Override default component styles with undefined values to reset them
 diff --git a/node_modules/react-native-unistyles/src/web/registry.ts b/node_modules/react-native-unistyles/src/web/registry.ts
 index 39e0d9d..a21ba95 100644
 --- a/node_modules/react-native-unistyles/src/web/registry.ts
@@ -317,15 +401,3 @@ index 39e0d9d..a21ba95 100644
          this.stylesCache.clear()
          this.dependenciesMap.clear()
          this.disposeListenersMap.clear()
-diff --git a/node_modules/react-native-unistyles/android/build.gradle b/node_modules/react-native-unistyles/android/build.gradle
-index 195954b..c4ac28c 100644
---- a/node_modules/react-native-unistyles/android/build.gradle
-+++ b/node_modules/react-native-unistyles/android/build.gradle
-@@ -38,6 +38,7 @@ if (isNewArchitectureEnabled()) {
- 
- android {
-     compileSdkVersion safeExtGet('compileSdkVersion', 35)
-+    ndkVersion safeExtGet('ndkVersion', '27.1.12297006')
-     namespace "com.unistyles"
- 
-     defaultConfig {

@@ -218,18 +218,20 @@ function normalizeTaskNotificationCallIdSegment(segment: string): string | null 
 }
 
 function buildTaskNotificationCallId(envelope: TaskNotificationEnvelope): string {
-  const messageSegment = envelope.messageId
-    ? normalizeTaskNotificationCallIdSegment(envelope.messageId)
-    : null;
-  if (messageSegment) {
-    return `task_notification_${messageSegment}`;
-  }
-
+  // Queue, system and delivered user records describe the same task notification.
+  // Their message IDs identify separate records, so use the shared task identity first.
   const taskSegment = envelope.taskId
     ? normalizeTaskNotificationCallIdSegment(envelope.taskId)
     : null;
   if (taskSegment) {
     return `task_notification_${taskSegment}`;
+  }
+
+  const messageSegment = envelope.messageId
+    ? normalizeTaskNotificationCallIdSegment(envelope.messageId)
+    : null;
+  if (messageSegment) {
+    return `task_notification_${messageSegment}`;
   }
 
   const seed =

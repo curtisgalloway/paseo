@@ -38,7 +38,7 @@ describe("task-notification-tool-call", () => {
 
     expect(item).toEqual({
       type: "tool_call",
-      callId: "task_notification_task-note-user-1",
+      callId: "task_notification_bg-1",
       name: "task_notification",
       status: "completed",
       error: null,
@@ -70,7 +70,7 @@ describe("task-notification-tool-call", () => {
 
     expect(item).toEqual({
       type: "tool_call",
-      callId: "task_notification_task-note-system-1",
+      callId: "task_notification_bg-fail-1",
       name: "task_notification",
       status: "failed",
       error: { message: "Background task failed" },
@@ -96,5 +96,18 @@ describe("task-notification-tool-call", () => {
     });
 
     expect(item).toBeNull();
+  });
+
+  it("keeps notifications without task IDs distinct by their message IDs", () => {
+    const items = ["message-1", "message-2"].map((messageId) =>
+      mapTaskNotificationUserContentToToolCall({
+        content: "<task-notification><status>completed</status></task-notification>",
+        messageId,
+      }),
+    );
+    expect(items.map((item) => item?.callId)).toEqual([
+      "task_notification_message-1",
+      "task_notification_message-2",
+    ]);
   });
 });

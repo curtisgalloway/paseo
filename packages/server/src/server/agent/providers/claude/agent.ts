@@ -1797,17 +1797,28 @@ export class ClaudeAgentClient implements AgentClient {
     // survives the import. Only an explicit rename counts: agents are named
     // after their first prompt line since #1563, so adopting the generated
     // `ai-title` here would put that LLM summary back.
-    const renamedTitle = await readClaudeRenamedSessionTitle({
+    const providerEnv = this.buildProviderEnv(context.launchContext?.env);
+    const facts = await readClaudeImportedSessionFacts({
       cwd: input.cwd,
       sessionId: input.providerHandleId,
-      configDir: claudeConfigDir(this.buildProviderEnv(context.launchContext?.env)),
+      configDir: claudeConfigDir(providerEnv),
     });
+    // Keep the permission mode the session last ran with in the CLI. Without
+    // this the resumed session falls back to "default" (Always ask) even when
+    // the terminal ran in auto. A session with no recorded mode, or one this
+    // environment cannot run (auto on Bedrock/Vertex), gets the same default a
+    // new agent would.
+    const catalog = claudeModeCatalog(providerEnv);
+    const modeId =
+      facts.permissionMode && catalog.modes.some((mode) => mode.id === facts.permissionMode)
+        ? facts.permissionMode
+        : catalog.defaultModeId;
     return importSessionFromPersistence({
       provider: "claude",
       request: input,
       context,
       resumeSession: this.resumeSession.bind(this),
-      ...(renamedTitle ? { config: { title: renamedTitle } } : {}),
+      config: { modeId, ...(facts.title ? { title: facts.title } : {}) },
     });
   }
 
@@ -6692,23 +6703,65 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
-async function readClaudeRenamedSessionTitle(input: {
+/**
+ * Finds the permission mode of the last main-thread user turn. The CLI stamps
+ * `permissionMode` on each user record, so the newest one is the mode the
+ * session was in when it was closed.
+ */
+function readLastClaudePermissionMode(content: string): PermissionMode | null {
+  const needle = `"permissionMode"`;
+  let at = content.lastIndexOf(needle);
+  while (at >= 0) {
+    const lineStart = content.lastIndexOf("\n", at) + 1;
+    const lineEnd = content.indexOf("\n", at);
+    const line = lineEnd === -1 ? content.slice(lineStart) : content.slice(lineStart, lineEnd);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line.trim());
+    } catch {
+      parsed = undefined;
+    }
+    const entry = toObjectRecord(parsed);
+    if (
+      entry &&
+      !entry.isSidechain &&
+      entry.type === "user" &&
+      typeof entry.permissionMode === "string" &&
+      isPermissionMode(entry.permissionMode)
+    ) {
+      return entry.permissionMode;
+    }
+    // A prompt can quote the needle, and sidechain records carry their own mode.
+    at = at <= 0 ? -1 : content.lastIndexOf(needle, at - 1);
+  }
+  return null;
+}
+
+interface ClaudeImportedSessionFacts {
+  title: string | null;
+  permissionMode: PermissionMode | null;
+}
+
+async function readClaudeImportedSessionFacts(input: {
   cwd: string;
   sessionId: string;
   configDir: string;
-}): Promise<string | null> {
+}): Promise<ClaudeImportedSessionFacts> {
   let content: string;
   try {
     content = await fsPromises.readFile(claudeTranscriptPathSync(input), "utf8");
   } catch (error) {
-    // A session with no transcript on disk has no rename to carry over. Every
+    // A session with no transcript on disk has nothing to carry over. Every
     // other read failure is a real fault and stays explicit.
     if (isErrnoException(error) && error.code === "ENOENT") {
-      return null;
+      return { title: null, permissionMode: null };
     }
     throw error;
   }
-  return readLastClaudeCustomTitle(content);
+  return {
+    title: readLastClaudeCustomTitle(content),
+    permissionMode: readLastClaudePermissionMode(content),
+  };
 }
 
 function normalizeImportablePromptPreview(text: string): string | null {

@@ -19,6 +19,8 @@ let previousConfigDir: string | undefined;
 interface UserRecordInput {
   sessionId: string;
   content: string;
+  permissionMode?: string;
+  isSidechain?: boolean;
 }
 
 interface WriteSessionInput {
@@ -26,13 +28,19 @@ interface WriteSessionInput {
   records: ClaudeTranscriptRecord[];
 }
 
-function userRecord({ sessionId, content }: UserRecordInput): ClaudeTranscriptRecord {
+function userRecord({
+  sessionId,
+  content,
+  permissionMode,
+  isSidechain = false,
+}: UserRecordInput): ClaudeTranscriptRecord {
   return {
-    isSidechain: false,
+    isSidechain,
     type: "user",
     message: { role: "user", content },
     cwd: SESSION_CWD,
     sessionId,
+    ...(permissionMode ? { permissionMode } : {}),
   };
 }
 
@@ -235,5 +243,92 @@ describe("importing a renamed Claude session", () => {
     await fs.mkdir(path.join(projectDir, `${sessionId}.jsonl`), { recursive: true });
 
     await expect(importSession(sessionId)).rejects.toThrow();
+  });
+});
+
+describe("importing a Claude session's permission mode", () => {
+  test("keeps the mode of the last user turn", async () => {
+    const sessionId = "mode-changed";
+    await writeSession({
+      sessionId,
+      records: [
+        userRecord({ sessionId, content: "Plan the schema change", permissionMode: "plan" }),
+        userRecord({ sessionId, content: "Go ahead", permissionMode: "auto" }),
+      ],
+    });
+
+    const imported = await importSession(sessionId);
+
+    expect(imported.config.modeId).toBe("auto");
+  });
+
+  test("keeps Always ask when the session last ran in it", async () => {
+    const sessionId = "mode-default";
+    await writeSession({
+      sessionId,
+      records: [
+        userRecord({ sessionId, content: "Review this project", permissionMode: "auto" }),
+        userRecord({ sessionId, content: "Carefully now", permissionMode: "default" }),
+      ],
+    });
+
+    const imported = await importSession(sessionId);
+
+    expect(imported.config.modeId).toBe("default");
+  });
+
+  test("ignores a mode recorded on a sidechain turn", async () => {
+    const sessionId = "mode-sidechain";
+    await writeSession({
+      sessionId,
+      records: [
+        userRecord({ sessionId, content: "Review this project", permissionMode: "plan" }),
+        userRecord({
+          sessionId,
+          content: "Subagent task",
+          permissionMode: "bypassPermissions",
+          isSidechain: true,
+        }),
+      ],
+    });
+
+    const imported = await importSession(sessionId);
+
+    expect(imported.config.modeId).toBe("plan");
+  });
+
+  test("uses the new-agent default when no mode was recorded", async () => {
+    const sessionId = "mode-unrecorded";
+    await writeSession({
+      sessionId,
+      records: [userRecord({ sessionId, content: "Review this project" })],
+    });
+
+    const imported = await importSession(sessionId);
+
+    expect(imported.config.modeId).toBe("auto");
+  });
+
+  test("falls back to Always ask when the recorded auto mode cannot run on Bedrock", async () => {
+    const sessionId = "mode-auto-bedrock";
+    await writeSession({
+      sessionId,
+      records: [userRecord({ sessionId, content: "Review this project", permissionMode: "auto" })],
+    });
+    const client = new ClaudeAgentClient({
+      logger: createTestLogger(),
+      resolveBinary: async () => "/test/claude/bin",
+    });
+
+    const imported = await client.importSession(
+      { providerHandleId: sessionId, cwd: SESSION_CWD },
+      {
+        config: { provider: "claude", cwd: SESSION_CWD },
+        storedConfig: { provider: "claude", cwd: SESSION_CWD },
+        launchContext: { env: { CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CONFIG_DIR: configDir } },
+      },
+    );
+
+    expect(imported.config.modeId).toBe("default");
   });
 });

@@ -1775,7 +1775,7 @@ export const en = {
         port: "Port",
         password: "Password",
         optional: "Optional",
-        useSsl: "Use SSL",
+        useSsl: "Use SSL (wss://)",
         connectionUri: "Connection URI",
       },
       advanced: {

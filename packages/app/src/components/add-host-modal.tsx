@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Alert, Pressable, Text, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { getIsElectron, isWeb } from "@/constants/platform";
+import { resolveDirectConnectionDefaults } from "@/utils/direct-connection-defaults";
 import { Check, ChevronDown, ChevronRight, Eye, EyeOff, Link2 } from "lucide-react-native";
 import type { HostProfile } from "@/types/host-connection";
 import { useHosts, useHostMutations } from "@/runtime/host-runtime";
@@ -226,9 +228,15 @@ function AddHostModalContent({ visible, onClose, onCancel, onSaved }: AddHostMod
 
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("6767");
-  const [useTls, setUseTls] = useState(false);
+  const [defaults] = useState(() =>
+    resolveDirectConnectionDefaults(
+      { isWeb, isElectron: getIsElectron() },
+      isWeb ? window.location : undefined,
+    ),
+  );
+  const [host, setHost] = useState(defaults.host);
+  const [port, setPort] = useState(defaults.port);
+  const [useTls, setUseTls] = useState(defaults.useTls);
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);

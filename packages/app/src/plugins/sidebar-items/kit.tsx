@@ -1,9 +1,10 @@
 import type { SidebarRowProps } from "@getpaseo/plugin/client/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { SidebarSeparator as AppSidebarSeparator } from "@/components/sidebar/sidebar-separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { parsePluginIcon, pluginIconComponent } from "../icons";
 import { useSidebarItemFrame } from "./frame";
 
@@ -12,7 +13,15 @@ import { useSidebarItemFrame } from "./frame";
  * makes that row the popover anchor: the capture-phase responder check runs before the pressed
  * child claims the touch (native and web), and returns false so the child still handles it.
  */
-export function SidebarRow({ id, icon, label, onPress, active, trailing }: SidebarRowProps) {
+export function SidebarRow({
+  id,
+  icon,
+  label,
+  onPress,
+  active,
+  trailing,
+  tooltip,
+}: SidebarRowProps) {
   const frame = useSidebarItemFrame("SidebarRow");
   const { anchorTo, offerAnchor, releaseAnchor } = frame;
   const rowRef = useRef<View | null>(null);
@@ -35,7 +44,7 @@ export function SidebarRow({ id, icon, label, onPress, active, trailing }: Sideb
     anchorTo(rowRef.current);
     onPress();
   }, [anchorTo, onPress]);
-  return (
+  const row = (
     <View ref={rowRef} collapsable={false} onStartShouldSetResponderCapture={anchorHere}>
       <SidebarHeaderRow
         icon={iconComponent}
@@ -47,6 +56,15 @@ export function SidebarRow({ id, icon, label, onPress, active, trailing }: Sideb
         variant={frame.section === "footer" ? "inline" : "compact"}
       />
     </View>
+  );
+  if (!tooltip) return row;
+  return (
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>{row}</TooltipTrigger>
+      <TooltipContent side={frame.section === "footer" ? "top" : "right"} align="center" offset={8}>
+        <Text style={styles.tooltipText}>{tooltip}</Text>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -69,5 +87,9 @@ const styles = StyleSheet.create((theme) => ({
   footer: {
     marginHorizontal: -theme.spacing[2],
     marginVertical: theme.spacing[0.5],
+  },
+  tooltipText: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.popoverForeground,
   },
 }));

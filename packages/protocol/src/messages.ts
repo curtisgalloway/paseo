@@ -1736,6 +1736,9 @@ export const CreateAgentRequestMessageSchema = z.object({
   config: AgentSessionConfigSchema,
   env: z.record(z.string(), z.string()).optional(),
   workspaceId: z.string().optional(),
+  // With workspaceId, run the agent in config.cwd instead of the workspace's directory.
+  // COMPAT(createAgentKeepCwd): added in v0.13.0, gate on server_info.features.createAgentKeepCwd.
+  keepCwd: z.boolean().optional(),
   // Optional caller context lets managed CLI invocations use the same daemon-owned
   // workspace and parentage policy as agent-scoped MCP creation.
   callerAgentId: z.string().optional(),
@@ -1773,6 +1776,7 @@ export const WorkspaceInitialAgentSchema = AgentCreateRequestSchema.omit({
   idempotencyKey: true,
   subscribe: true,
   workspaceId: true,
+  keepCwd: true,
   worktree: true,
   worktreeName: true,
   git: true,
@@ -3722,6 +3726,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceFileEditing: z.boolean().optional(),
         // COMPAT(fileByteWrites): added in v0.13.0, remove gate after 2027-04-20.
         fileByteWrites: z.boolean().optional(),
+        // COMPAT(createAgentKeepCwd): added in v0.13.0, remove gate after 2027-04-26.
+        createAgentKeepCwd: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.

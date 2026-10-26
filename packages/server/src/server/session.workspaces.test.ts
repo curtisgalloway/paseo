@@ -9925,3 +9925,193 @@ test("workspace PR status survives session cleanup and reconnect", async () => {
     await gitService.dispose();
   }
 });
+
+async function createExistingWorkspaceSession(workdir: string) {
+  const cwd = path.join(workdir, "repo");
+  mkdirSync(cwd, { recursive: true });
+  const logger = {
+    child: () => logger,
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const agentStorage = new AgentStorage(path.join(workdir, "agents"), asSessionLogger(logger));
+  const agentManager = new AgentManager({
+    clients: { codex: new CreateAgentTestClient() },
+    registry: agentStorage,
+    logger: asSessionLogger(logger),
+    idFactory: () => "00000000-0000-4000-8000-000000000553",
+  });
+  const projectRegistry = new FileBackedProjectRegistry(
+    path.join(workdir, "projects.json"),
+    asSessionLogger(logger),
+  );
+  const workspaceRegistry = new FileBackedWorkspaceRegistry(
+    path.join(workdir, "workspaces.json"),
+    asSessionLogger(logger),
+  );
+  await projectRegistry.upsert(
+    createPersistedProjectRecord({
+      projectId: "proj-existing",
+      rootPath: cwd,
+      kind: "git",
+      displayName: "repo",
+      createdAt: "2026-05-07T00:00:00.000Z",
+      updatedAt: "2026-05-07T00:00:00.000Z",
+    }),
+  );
+  await workspaceRegistry.upsert(
+    createPersistedWorkspaceRecord({
+      workspaceId: "ws-existing",
+      projectId: "proj-existing",
+      cwd,
+      kind: "local_checkout",
+      displayName: "repo",
+      title: null,
+      createdAt: "2026-05-07T00:00:00.000Z",
+      updatedAt: "2026-05-07T00:00:00.000Z",
+    }),
+  );
+  const onMessage = vi.fn();
+  const session = asTestSession(
+    new Session({
+      workspaceRuntimeStore: createWorkspaceRuntimeStore(),
+      messageReceipts: createMessageReceiptsStub(),
+      agentMessages: createAgentMessageDeliveryStub(),
+      creationService: createTestCreationService(),
+      clientId: "test-client",
+      permissions: OWNER_PERMISSIONS,
+      appVersion: null,
+      onMessage,
+      logger: asSessionLogger(logger),
+      downloadTokenStore: asDownloadTokenStore(),
+      pushNotifications: asPushNotifications(),
+      paseoHome: path.join(workdir, "paseo-home"),
+      agentManager,
+      agentStorage,
+      projectRegistry,
+      workspaceRegistry,
+      scheduleService: asScheduleService(),
+      checkoutDiffManager: asCheckoutDiffManager({
+        subscribe: async () => ({
+          initial: { cwd, files: [], error: null },
+          unsubscribe: () => {},
+        }),
+        scheduleRefreshForCwd: () => {},
+        onWorkspaceStateMayHaveChanged: () => {},
+        invalidateForge: () => {},
+        getMetrics: () => ({
+          checkoutDiffTargetCount: 0,
+          checkoutDiffSubscriptionCount: 0,
+          checkoutDiffWatcherCount: 0,
+          checkoutDiffFallbackRefreshTargetCount: 0,
+        }),
+        dispose: () => {},
+      }),
+      workspaceGitService: createNoopWorkspaceGitService(),
+      daemonConfigStore: asDaemonConfigStore({
+        get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+        onChange: () => () => {},
+      }),
+      mcpBaseUrl: null,
+      stt: null,
+      tts: null,
+      generateWorkspaceName: async () => ({ title: null, branch: null }),
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      terminalManager: null,
+    }),
+  );
+  return { session, agentManager, cwd, onMessage };
+}
+
+test("create_agent_request uses the existing workspace's cwd without keepCwd", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-keep-cwd-off-"));
+  try {
+    const { session, agentManager, cwd } = await createExistingWorkspaceSession(workdir);
+    const other = path.join(workdir, "elsewhere");
+    mkdirSync(other, { recursive: true });
+
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-keep-cwd-off",
+      workspaceId: "ws-existing",
+      config: { provider: "codex", cwd: other },
+      attachments: [],
+    });
+
+    const [createdAgent] = agentManager.listAgents();
+    expect(createdAgent?.workspaceId).toBe("ws-existing");
+    expect(createdAgent?.cwd).toBe(cwd);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request with keepCwd keeps the requested cwd inside an existing workspace", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-keep-cwd-"));
+  try {
+    const { session, agentManager } = await createExistingWorkspaceSession(workdir);
+    const batchWorktree = path.join(workdir, "wt", "batch-1");
+    mkdirSync(batchWorktree, { recursive: true });
+
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-keep-cwd",
+      workspaceId: "ws-existing",
+      keepCwd: true,
+      config: { provider: "codex", cwd: batchWorktree },
+      attachments: [],
+    });
+
+    const [createdAgent] = agentManager.listAgents();
+    expect(createdAgent?.workspaceId).toBe("ws-existing");
+    expect(createdAgent?.cwd).toBe(batchWorktree);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request with keepCwd rejects a cwd that is not a directory", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-keep-cwd-missing-"));
+  try {
+    const { session, agentManager, onMessage } = await createExistingWorkspaceSession(workdir);
+
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-keep-cwd-missing",
+      workspaceId: "ws-existing",
+      keepCwd: true,
+      config: { provider: "codex", cwd: path.join(workdir, "missing") },
+      attachments: [],
+    });
+
+    expect(agentManager.listAgents()).toHaveLength(0);
+    const sent = onMessage.mock.calls.map(([message]) => JSON.stringify(message));
+    expect(sent.some((message) => message.includes("not a directory"))).toBe(true);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("create_agent_request rejects keepCwd without a workspaceId", async () => {
+  const workdir = mkdtempSync(path.join(tmpdir(), "paseo-create-agent-keep-cwd-no-ws-"));
+  try {
+    const { session, agentManager, cwd, onMessage } = await createExistingWorkspaceSession(workdir);
+
+    await session.handleMessage({
+      type: "create_agent_request",
+      requestId: "req-keep-cwd-no-ws",
+      keepCwd: true,
+      config: { provider: "codex", cwd },
+      attachments: [],
+    });
+
+    expect(agentManager.listAgents()).toHaveLength(0);
+    const sent = onMessage.mock.calls.map(([message]) => JSON.stringify(message));
+    expect(sent.some((message) => message.includes("keepCwd applies only"))).toBe(true);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});

@@ -84,6 +84,16 @@ const agent = await workspace.agents.create({
 
 The handle supplies both the workspace identity and its actual directory. This avoids mismatched placement arguments.
 
+To group agents that each need their own directory (one git worktree per task, say) under one workspace, pass `cwd`. The agent belongs to the workspace and runs in that directory. Hosts without `server_info.features.createAgentKeepCwd` reject the call with an "Update the host" error.
+
+```ts
+const agent = await workspace.agents.create({
+  config: { provider: "claude/claude-sonnet-5" },
+  cwd: "/Users/me/dev/storefront/.worktrees/task-1",
+  prompt: "Fix the checkout total.",
+});
+```
+
 For a one-off agent, you can skip the workspace call:
 
 ```ts

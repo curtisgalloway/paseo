@@ -470,6 +470,8 @@ export interface CreateAgentRequestOptions extends AgentConfigOverrides {
   cwd?: string;
   env?: CreateAgentRequestMessage["env"];
   workspaceId?: string;
+  /** With `workspaceId`, run the agent in `cwd` instead of the workspace's directory. */
+  keepCwd?: boolean;
   callerAgentId?: string;
   initialPrompt?: string;
   idempotencyKey?: string;
@@ -3190,6 +3192,7 @@ export class DaemonClient {
       config,
       ...(options.env ? { env: options.env } : {}),
       ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
+      ...(options.keepCwd ? { keepCwd: true } : {}),
       ...(options.callerAgentId !== undefined ? { callerAgentId: options.callerAgentId } : {}),
       ...(options.initialPrompt ? { initialPrompt: options.initialPrompt } : {}),
       idempotencyKey: options.idempotencyKey,

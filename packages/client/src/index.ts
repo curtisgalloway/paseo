@@ -269,7 +269,19 @@ export interface PaseoAgentCreateOptions {
   labels?: Record<string, string>;
 }
 
-export type PaseoWorkspaceAgentCreateOptions = Omit<PaseoAgentCreateOptions, "cwd">;
+export interface PaseoWorkspaceAgentCreateOptions extends Omit<PaseoAgentCreateOptions, "cwd"> {
+  /**
+   * Run the agent in this directory instead of the workspace's. The agent still belongs to
+   * the workspace. Needs a host with `server_info.features.createAgentKeepCwd`.
+   */
+  cwd?: string;
+}
+
+interface AgentPlacement {
+  workspaceId: string;
+  cwd: string;
+  keepCwd?: boolean;
+}
 
 export interface PaseoAgentRefetchResult {
   agent: PaseoAgent;
@@ -533,7 +545,7 @@ export function createPaseoClient(config: PaseoClientConfig): PaseoClient {
 
 function toDaemonAgentCreateOptions(
   options: PaseoAgentCreateOptions,
-  placement?: { workspaceId: string; cwd: string },
+  placement?: AgentPlacement,
   serverId?: string,
 ): CreateAgentRequestOptions {
   const { config: agentConfig, cwd, parent, title, prompt, ...requestOptions } = options;
@@ -551,6 +563,7 @@ function toDaemonAgentCreateOptions(
       ...(providerOptions !== undefined ? { providerOptions } : {}),
     },
     ...(placement ? { workspaceId: placement.workspaceId } : {}),
+    ...(placement?.keepCwd ? { keepCwd: true } : {}),
     ...(parent
       ? {
           ...relationship,
@@ -599,10 +612,7 @@ export function createPaseoApi(
     listenAgents,
     (agentId, handler) => own(() => daemonClient.subscribeAgentTimeline(agentId, handler)),
   );
-  const createAgent = async (
-    options: PaseoAgentCreateOptions,
-    placement?: { workspaceId: string; cwd: string },
-  ) => {
+  const createAgent = async (options: PaseoAgentCreateOptions, placement?: AgentPlacement) => {
     const agent = await daemonClient.createAgent(
       toDaemonAgentCreateOptions(
         options,
@@ -799,7 +809,7 @@ type WorkspaceHandleFactory = (workspace: string | PaseoWorkspace) => PaseoWorks
 type AgentHandleFactory = (agent: string | PaseoAgent) => PaseoAgentHandle;
 type CreateAgent = (
   options: PaseoAgentCreateOptions,
-  placement?: { workspaceId: string; cwd: string },
+  placement?: AgentPlacement,
 ) => Promise<PaseoAgentHandle>;
 
 function createWorkspaceHandleFactory(
@@ -850,7 +860,14 @@ function createWorkspaceHandleFactory(
         return current?.status ?? null;
       },
       agents: {
-        create: async (options) => {
+        create: async ({ cwd, ...options }) => {
+          if (cwd !== undefined) {
+            // COMPAT(createAgentKeepCwd): added in v0.13.0, remove after 2027-04-26 once daemon floor >= v0.13.0.
+            if (daemonClient.getLastServerInfoMessage()?.features?.createAgentKeepCwd !== true) {
+              throw new Error("Update the host to create a workspace agent in its own directory.");
+            }
+            return createAgent({ ...options, cwd }, { workspaceId: id, cwd, keepCwd: true });
+          }
           const snapshot = current ?? (await refresh());
           if (!snapshot?.workspaceDirectory) {
             throw new Error(`Workspace ${id} has no available directory`);

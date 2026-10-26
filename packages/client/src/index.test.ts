@@ -1770,3 +1770,58 @@ test("qualified parents preserve foreign identity without resolving an equal loc
   await client.close();
   expect(localParent.address).toEqual({ serverId: "srv_sdk_test", agentId: "same-parent" });
 });
+
+test("workspace agents.create with cwd keeps that cwd inside the workspace", async () => {
+  const { client, ws } = await connectClient({ createAgentKeepCwd: true });
+  const workspace = client.workspaces.ref(
+    createWorkspace({ id: "workspace_feedback", workspaceDirectory: "/repo/.feedback" }),
+  );
+
+  const agentPromise = workspace.agents.create({
+    config: { provider: "codex/gpt-5.4" },
+    cwd: "/repo/.feedback/wt/batch-1",
+    prompt: "Triage batch 1.",
+  });
+  const agentRequest = parseSentSessionMessage(ws.sent.at(-1));
+  expect(agentRequest).toMatchObject({
+    type: "create_agent_request",
+    config: { provider: "codex", model: "gpt-5.4", cwd: "/repo/.feedback/wt/batch-1" },
+    workspaceId: "workspace_feedback",
+    keepCwd: true,
+  });
+  ws.message(
+    sessionMessage({
+      type: "status",
+      payload: {
+        status: "agent_created",
+        requestId: agentRequest.requestId,
+        agentId: "agent_triage",
+        agent: createAgent({
+          id: "agent_triage",
+          workspaceId: "workspace_feedback",
+          cwd: "/repo/.feedback/wt/batch-1",
+        }),
+      },
+    }),
+  );
+
+  const agent = await agentPromise;
+  expect(agent.workspaceId).toBe("workspace_feedback");
+  expect(agent.cwd).toBe("/repo/.feedback/wt/batch-1");
+  await client.close();
+});
+
+test("workspace agents.create with cwd fails before sending on a host without createAgentKeepCwd", async () => {
+  const { client, ws } = await connectClient();
+  const workspace = client.workspaces.ref(createWorkspace({ id: "workspace_feedback" }));
+  const sentBefore = ws.sent.length;
+
+  await expect(
+    workspace.agents.create({
+      config: { provider: "codex/gpt-5.4" },
+      cwd: "/repo/.feedback/wt/batch-1",
+    }),
+  ).rejects.toThrow("Update the host to create a workspace agent in its own directory.");
+  expect(ws.sent).toHaveLength(sentBefore);
+  await client.close();
+});

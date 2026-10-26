@@ -4357,6 +4357,9 @@ export class Session {
         "background is workspace creation intent; configure the selected workspace at creation.",
       );
     }
+    if (request.keepCwd && (!request.workspaceId || request.worktree)) {
+      throw new Error("keepCwd applies only to an existing workspace given by workspaceId.");
+    }
   }
 
   private async createSessionAgent(
@@ -4513,7 +4516,7 @@ export class Session {
         if (!workspace || workspace.archivedAt) {
           throw new Error(`Workspace ${workspaceId} not found`);
         }
-        return { workspaceId, cwd: workspace.cwd };
+        return { workspaceId, cwd: request.keepCwd ? config.cwd : workspace.cwd };
       },
       createWorkspace: async () => ({
         workspaceId: await this.workspaceProvisioning.resolveOrCreateWorkspaceIdForCreateAgent({

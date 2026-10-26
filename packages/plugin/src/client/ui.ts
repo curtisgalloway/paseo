@@ -167,6 +167,8 @@ export interface SidebarRowProps {
   active?: boolean;
   /** Right slot. Renders beside the row's pressable, so a button here presses on its own. */
   trailing?: ReactNode;
+  /** Short text shown on hover (desktop web only). */
+  tooltip?: string;
 }
 /** A sidebar navigation row. Render it from a sidebar item's `Component`. */
 export declare const SidebarRow: ComponentType<SidebarRowProps>;

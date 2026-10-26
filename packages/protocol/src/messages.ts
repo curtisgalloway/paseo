@@ -1737,7 +1737,7 @@ export const CreateAgentRequestMessageSchema = z.object({
   env: z.record(z.string(), z.string()).optional(),
   workspaceId: z.string().optional(),
   // With workspaceId, run the agent in config.cwd instead of the workspace's directory.
-  // COMPAT(createAgentKeepCwd): added in v0.13.0, gate on server_info.features.createAgentKeepCwd.
+  // COMPAT(createAgentKeepCwd): added in v0.13.0, remove optional after 2027-04-26 once daemon floor >= v0.13.0.
   keepCwd: z.boolean().optional(),
   // Optional caller context lets managed CLI invocations use the same daemon-owned
   // workspace and parentage policy as agent-scoped MCP creation.

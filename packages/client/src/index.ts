@@ -862,6 +862,9 @@ function createWorkspaceHandleFactory(
       agents: {
         create: async ({ cwd, ...options }) => {
           if (cwd !== undefined) {
+            // server_info is cleared while (re)connecting; without this wait a missing flag
+            // would read as a host without the feature.
+            await daemonClient.connect();
             // COMPAT(createAgentKeepCwd): added in v0.13.0, remove after 2027-04-26 once daemon floor >= v0.13.0.
             if (daemonClient.getLastServerInfoMessage()?.features?.createAgentKeepCwd !== true) {
               throw new Error("Update the host to create a workspace agent in its own directory.");

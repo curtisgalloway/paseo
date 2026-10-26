@@ -1782,6 +1782,9 @@ test("workspace agents.create with cwd keeps that cwd inside the workspace", asy
     cwd: "/repo/.feedback/wt/batch-1",
     prompt: "Triage batch 1.",
   });
+  await vi.waitFor(() =>
+    expect(parseSentSessionMessage(ws.sent.at(-1)).type).toBe("create_agent_request"),
+  );
   const agentRequest = parseSentSessionMessage(ws.sent.at(-1));
   expect(agentRequest).toMatchObject({
     type: "create_agent_request",
@@ -1823,5 +1826,55 @@ test("workspace agents.create with cwd fails before sending on a host without cr
     }),
   ).rejects.toThrow("Update the host to create a workspace agent in its own directory.");
   expect(ws.sent).toHaveLength(sentBefore);
+  await client.close();
+});
+
+test("workspace agents.create with cwd waits for server_info instead of reporting an old host", async () => {
+  const client = createPaseoClient({
+    url: "ws://daemon.test",
+    webSocketFactory: (url) => new FakeWebSocket(url),
+    reconnect: { enabled: false },
+  });
+  const workspace = client.workspaces.ref(createWorkspace({ id: "workspace_feedback" }));
+
+  const agentPromise = workspace.agents.create({
+    config: { provider: "codex/gpt-5.4" },
+    cwd: "/repo/.feedback/wt/batch-1",
+  });
+  await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+  const ws = FakeWebSocket.instances[0];
+  ws.open();
+  ws.message(
+    sessionMessage({
+      type: "status",
+      payload: {
+        status: "server_info",
+        serverId: "srv_sdk_test",
+        hostname: null,
+        version: null,
+        features: { createAgentKeepCwd: true },
+      },
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(parseSentSessionMessage(ws.sent.at(-1))).toMatchObject({
+      type: "create_agent_request",
+      keepCwd: true,
+    }),
+  );
+  const agentRequest = parseSentSessionMessage(ws.sent.at(-1));
+  ws.message(
+    sessionMessage({
+      type: "status",
+      payload: {
+        status: "agent_created",
+        requestId: agentRequest.requestId,
+        agentId: "agent_triage",
+        agent: createAgent({ id: "agent_triage", workspaceId: "workspace_feedback" }),
+      },
+    }),
+  );
+
+  expect((await agentPromise).id).toBe("agent_triage");
   await client.close();
 });

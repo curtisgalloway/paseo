@@ -69,6 +69,8 @@ function restoreGlobals(): void {
 }
 
 describe("sendOsNotification", () => {
+  let windowFocus: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     class MockCustomEvent<T = unknown> {
       type: string;
@@ -91,6 +93,8 @@ describe("sendOsNotification", () => {
 
     (globalThis as { CustomEvent?: unknown }).CustomEvent = MockCustomEvent;
     (globalThis as { focus?: unknown }).focus = vi.fn();
+    windowFocus = vi.fn();
+    (globalThis as { window?: unknown }).window = { focus: windowFocus };
   });
 
   afterEach(() => {
@@ -98,6 +102,7 @@ describe("sendOsNotification", () => {
     vi.restoreAllMocks();
     vi.resetModules();
     restoreGlobals();
+    delete (globalThis as { window?: unknown }).window;
   });
 
   it("dispatches a click event that the app can handle", async () => {
@@ -158,6 +163,8 @@ describe("sendOsNotification", () => {
       data: { serverId: "srv-1", agentId: "agent-1" },
     });
     expect(assign).not.toHaveBeenCalled();
+    expect(windowFocus).toHaveBeenCalledTimes(1);
+    expect(clicked.close).toHaveBeenCalledTimes(1);
   });
 
   it("leaves navigation to the app when no listener handles the click", async () => {
@@ -223,7 +230,7 @@ describe("sendOsNotification", () => {
     expect(sent).toBe(false);
   });
 
-  it("does not attach a click handler when there is no route target", async () => {
+  it("focuses the window and dispatches nothing when there is no route target", async () => {
     const created: MockNotificationInstance[] = [];
 
     class MockNotification implements MockNotificationInstance {
@@ -247,7 +254,8 @@ describe("sendOsNotification", () => {
     }
 
     (globalThis as { Notification?: unknown }).Notification = MockNotification;
-    (globalThis as { dispatchEvent?: unknown }).dispatchEvent = vi.fn();
+    const dispatchEvent = vi.fn();
+    (globalThis as { dispatchEvent?: unknown }).dispatchEvent = dispatchEvent;
     (globalThis as { location?: unknown }).location = { assign: vi.fn() };
 
     const { sendOsNotification } = await loadModuleForPlatform("web");
@@ -259,7 +267,12 @@ describe("sendOsNotification", () => {
 
     expect(sent).toBe(true);
     expect(created).toHaveLength(1);
-    expect(created[0]?.clickListeners).toHaveLength(0);
+    expect(created[0]?.clickListeners).toHaveLength(1);
+    created[0]?.clickListeners[0]?.({} as Event);
+
+    expect(windowFocus).toHaveBeenCalledTimes(1);
+    expect(created[0]?.close).toHaveBeenCalledTimes(1);
+    expect(dispatchEvent).not.toHaveBeenCalled();
   });
 
   it("uses the desktop notification bridge when available", async () => {

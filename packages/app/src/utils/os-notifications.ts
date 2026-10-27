@@ -15,6 +15,7 @@ export interface WebNotificationClickDetail {
 
 interface WebNotificationInstance {
   addEventListener: (type: "click", listener: (event: Event) => void) => void;
+  close?: () => void;
 }
 
 let permissionRequest: Promise<boolean> | null = null;
@@ -132,12 +133,28 @@ function dispatchWebNotificationClick(detail: WebNotificationClickDetail): boole
   return !dispatch(event);
 }
 
+function focusWebWindow(): void {
+  try {
+    if (typeof window !== "undefined" && typeof window.focus === "function") {
+      window.focus();
+    }
+  } catch {
+    // Focus is best-effort; browsers may refuse it.
+  }
+}
+
 function attachWebClickHandler(
   notification: WebNotificationInstance,
   data: Record<string, unknown> | undefined,
 ): void {
   notification.addEventListener("click", () => {
-    dispatchWebNotificationClick({ data });
+    focusWebWindow();
+    if (typeof notification.close === "function") {
+      notification.close();
+    }
+    if (hasNotificationClickTarget(data)) {
+      dispatchWebNotificationClick({ data });
+    }
   });
 }
 
@@ -161,9 +178,7 @@ export async function sendOsNotification(payload: OsNotificationPayload): Promis
         data: payload.data,
         icon: getWebNotificationIconUrl(),
       }) as WebNotificationInstance;
-      if (hasNotificationClickTarget(payload.data)) {
-        attachWebClickHandler(notification, payload.data);
-      }
+      attachWebClickHandler(notification, payload.data);
       return true;
     }
   }

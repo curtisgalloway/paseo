@@ -1425,6 +1425,13 @@ export const DaemonConfigReloadRequestSchema = z.object({
   requestId: z.string(),
 });
 
+export const AttentionFocusSetRequestSchema = z.object({
+  type: z.literal("attention.focus.set.request"),
+  requestId: z.string(),
+  // Milliseconds until focus ends, or null to end it now. The daemon accepts up to 8 hours.
+  durationMs: z.number().nullable(),
+});
+
 export const HubManagementDaemonConnectRequestSchema = z.object({
   type: z.literal("hub.management.daemon.connect.request"),
   requestId: z.string(),
@@ -3287,6 +3294,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetStatusRequestSchema,
   DaemonGetPairingOfferRequestSchema,
   DaemonConfigReloadRequestSchema,
+  AttentionFocusSetRequestSchema,
   HubManagementDaemonConnectRequestSchema,
   HubManagementDaemonGetStatusRequestSchema,
   HubManagementDaemonDisconnectRequestSchema,
@@ -3611,6 +3619,16 @@ const ServerCapabilitiesFromUnknownSchema = z
     return parsed.data;
   });
 
+// A user-started, auto-expiring stretch during which Caution-tier notifications are held and
+// delivered together as one summary when focus ends. `source` is a plain string so a later
+// source (a calendar) does not narrow what older clients accept.
+export const AttentionFocusStateSchema = z.object({
+  active: z.boolean(),
+  until: z.string().nullable(),
+  source: z.string().nullable(),
+  heldCount: z.number(),
+});
+
 export const ServerInfoStatusPayloadSchema = z
   .object({
     status: z.literal("server_info"),
@@ -3625,6 +3643,8 @@ export const ServerInfoStatusPayloadSchema = z
     // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
     desktopManaged: z.boolean().optional(),
     capabilities: ServerCapabilitiesFromUnknownSchema.optional(),
+    // COMPAT(attentionFocus): added after v0.13.2, remove optional parsing once the daemon floor includes it.
+    attentionFocus: AttentionFocusStateSchema.optional(),
     // COMPAT(providersSnapshot): added in v0.1.48, remove gating when all clients use snapshot
     features: z
       .object({
@@ -3678,6 +3698,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonStatusRpc: z.boolean().optional(),
         // COMPAT(daemonConfigReload): added in v0.4.0, remove gate after 2027-02-14.
         daemonConfigReload: z.boolean().optional(),
+        // COMPAT(attentionFocus): added after v0.13.2, remove gate once the daemon floor includes it.
+        attentionFocus: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         relayConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
@@ -5167,6 +5189,15 @@ export const DaemonConfigReloadResponseSchema = z.object({
       overrideControlledPaths: z.array(z.string()),
     })
     .passthrough(),
+});
+
+export const AttentionFocusSetResponseSchema = z.object({
+  type: z.literal("attention.focus.set.response"),
+  payload: z.object({
+    requestId: z.string(),
+    focus: AttentionFocusStateSchema.nullable(),
+    error: z.string().nullable(),
+  }),
 });
 
 export const DiagnosticsResponseSchema = z.object({
@@ -7050,6 +7081,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   DaemonGetStatusResponseSchema,
   DaemonGetPairingOfferResponseSchema,
   DaemonConfigReloadResponseSchema,
+  AttentionFocusSetResponseSchema,
   HubManagementDaemonConnectResponseSchema,
   HubManagementDaemonGetStatusResponseSchema,
   HubManagementDaemonDisconnectResponseSchema,
@@ -7305,6 +7337,8 @@ export type ListAvailableProvidersResponse = z.infer<typeof ListAvailableProvide
 export type DaemonGetStatusResponse = z.infer<typeof DaemonGetStatusResponseSchema>;
 export type DaemonGetPairingOfferResponse = z.infer<typeof DaemonGetPairingOfferResponseSchema>;
 export type DaemonConfigReloadResponse = z.infer<typeof DaemonConfigReloadResponseSchema>;
+export type AttentionFocusSetResponse = z.infer<typeof AttentionFocusSetResponseSchema>;
+export type AttentionFocusState = z.infer<typeof AttentionFocusStateSchema>;
 export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;
 export type GetProvidersSnapshotResponseMessage = z.infer<
   typeof GetProvidersSnapshotResponseMessageSchema

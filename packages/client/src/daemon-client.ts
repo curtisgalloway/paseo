@@ -107,6 +107,7 @@ import type {
   UsageReportEntry,
   DaemonGetStatusResponse,
   DaemonGetPairingOfferResponse,
+  AttentionFocusSetResponse,
   DaemonConfigReloadResponse,
   DiagnosticsResponse,
   AgentRewindResponseMessage,
@@ -5456,6 +5457,24 @@ export class DaemonClient {
       responseType: "daemon.get_status.response",
       timeout: options?.timeout,
     });
+  }
+
+  /** Starts or replaces a focus period (`durationMs`), or ends it now (`null`). */
+  async setAttentionFocus(
+    durationMs: number | null,
+    requestId?: string,
+  ): Promise<AttentionFocusSetResponse["payload"]> {
+    // COMPAT(attentionFocus): added after v0.13.2, remove gate once the daemon floor includes it.
+    if (this.lastServerInfoMessage?.features?.attentionFocus !== true) {
+      throw new Error("Update the host to use focus periods.");
+    }
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"attention.focus.set.response">({
+        requestId,
+        message: { type: "attention.focus.set.request", durationMs },
+      });
+    if (payload.error) throw new Error(payload.error);
+    return payload;
   }
 
   async reloadDaemonConfig(requestId?: string): Promise<DaemonConfigReloadResponse["payload"]> {

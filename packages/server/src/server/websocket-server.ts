@@ -85,11 +85,15 @@ import {
   computeNotificationPlan,
   attentionTier,
   isPushEligibleAttentionReason,
+  type AttentionTier,
   type ClientPresenceState,
+  type NotificationPlan,
 } from "./agent-attention-policy.js";
+import { AttentionFocus, buildFocusSummary, type HeldAttentionEntry } from "./attention-focus.js";
 import {
   buildAgentAttentionNotificationPayload,
   findLatestPermissionRequest,
+  type AgentAttentionNotificationPayload,
 } from "@getpaseo/protocol/agent-attention-notification";
 import { createGitHubService } from "../services/github-service.js";
 import type { ForgeService } from "../services/forge-service.js";
@@ -572,6 +576,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceAutoName: WorkspaceAutoName;
   private readonly downloadTokenStore: DownloadTokenStore;
   private readonly paseoHome: string;
+  private readonly attentionFocus: AttentionFocus;
   private readonly connectedHosts: ConnectedHosts;
 
   toolHosts() {
@@ -802,6 +807,18 @@ export class VoiceAssistantWebSocketServer {
       filePath: join(paseoHome, "push-tokens.json"),
     });
     this.pushNotificationSender = pushNotificationSender ?? this.pushNotifications;
+
+    this.attentionFocus = new AttentionFocus({
+      filePath: join(paseoHome, "focus.json"),
+      logger: this.logger.child({ module: "attention-focus" }),
+      onChange: () => this.broadcastCapabilitiesUpdate(),
+      onEnded: (held) => {
+        void this.deliverFocusSummary(held).catch((err) => {
+          this.logger.warn({ err }, "Failed to deliver focus summary");
+        });
+      },
+    });
+    this.attentionFocus.start();
 
     this.agentManager.setAgentAttentionCallback((params) => {
       void this.broadcastAgentAttention(params).catch((err) => {
@@ -1137,6 +1154,7 @@ export class VoiceAssistantWebSocketServer {
     this.prepareForShutdown();
     await this.agentMessages.close();
     await this.connectedHosts.close();
+    this.attentionFocus.dispose();
     this.unsubscribeSpeechReadiness?.();
     this.unsubscribeSpeechReadiness = null;
     this.unsubscribeDaemonConfigChange?.();
@@ -1580,6 +1598,7 @@ export class VoiceAssistantWebSocketServer {
       appVersion: options.appVersion,
       clientCapabilities: options.clientCapabilities,
       permissions: options.permissions,
+      attentionFocus: { set: (durationMs) => this.attentionFocus.set(durationMs) },
       onMessage: options.onMessage,
       onMessageToSource: options.onMessageToSource,
       onBinaryMessage: options.onBinaryMessage,
@@ -1944,7 +1963,10 @@ export class VoiceAssistantWebSocketServer {
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
       desktopManaged: this.daemonRuntimeConfig?.desktopManaged === true,
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
+      attentionFocus: this.attentionFocus.getState(),
       features: {
+        // COMPAT(attentionFocus): added after v0.13.2, remove gate once the daemon floor includes it.
+        attentionFocus: true,
         connectedHosts: true,
         hostMultiplexing: true,
         // COMPAT(relayProtectedSecurity): added in v0.13.0, remove gate after 2027-04-21.
@@ -2828,15 +2850,120 @@ export class VoiceAssistantWebSocketServer {
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "agent", id: params.agentId },
-      pushEligible: isPushEligibleAttentionReason({
+    // Focus holds Caution events: the sidebar still updates, but nothing notifies.
+    const held = tier === "caution" && this.attentionFocus.isActive();
+    if (held) {
+      this.attentionFocus.hold({
+        agentId: params.agentId,
+        title: agent.config?.title ?? null,
         reason: params.reason,
-        awaitingInput: params.awaitingInput,
-      }),
-      nowMs,
+        awaitingInput: params.awaitingInput === true,
+        at: new Date(nowMs).toISOString(),
+      });
+    }
+
+    const plan = held
+      ? { inAppRecipientIndex: null, shouldPush: false }
+      : computeNotificationPlan({
+          allStates,
+          focusTarget: { kind: "agent", id: params.agentId },
+          pushEligible: isPushEligibleAttentionReason({
+            reason: params.reason,
+            awaitingInput: params.awaitingInput,
+          }),
+          nowMs,
+        });
+
+    this.sendAgentAttention({
+      agentId: params.agentId,
+      provider: params.provider,
+      reason: params.reason,
+      awaitingInput: params.awaitingInput,
+      tier,
+      notification,
+      plan,
+      clientEntries,
+      notificationEntries,
     });
+  }
+
+  // One summary for everything focus held, routed like a Caution attention event.
+  private async deliverFocusSummary(held: readonly HeldAttentionEntry[]): Promise<void> {
+    const target = held
+      .map((entry) => ({ entry, agent: this.agentManager.getAgent(entry.agentId) }))
+      .find((candidate) => candidate.agent?.workspaceId);
+    const agent = target?.agent;
+    if (!target || !agent?.workspaceId) {
+      // No held agent is loaded (for example, focus expired while the daemon was down), so there
+      // is no client list to route through; push it.
+      const first = held[0];
+      if (!first) return;
+      const summary = buildFocusSummary(held);
+      await this.pushNotificationSender.send({
+        title: summary.title,
+        body: summary.body,
+        tier: "caution",
+        data: { serverId: this.serverId, agentId: first.agentId, reason: first.reason },
+      });
+      return;
+    }
+    const clientEntries: Array<{ ws: WebSocketLike; state: ClientPresenceState }> = [];
+    for (const [ws, connection] of this.sessions) {
+      if (
+        connection.session.delivery.isModern(ws)
+          ? !connection.session.wantsSourceEvent(ws, "agent_attention_required")
+          : !(await connection.session.subscribesToAgent(agent, ws))
+      )
+        continue;
+      clientEntries.push({ ws, state: this.getClientActivityState(connection.session, ws) });
+    }
+    const notificationEntries = clientEntries.filter(({ ws }) =>
+      this.sessions.get(ws)?.session.wantsSourceNotification(ws, "agent_attention_required"),
+    );
+    const summary = buildFocusSummary(held);
+    // Reuses the first held agent's id so a tap on the summary navigates to it.
+    const notification: AgentAttentionNotificationPayload = {
+      title: summary.title,
+      body: summary.body,
+      tier: "caution",
+      data: {
+        serverId: this.serverId,
+        workspaceId: agent.workspaceId,
+        agentId: target.entry.agentId,
+        reason: target.entry.reason,
+      },
+    };
+    const plan = computeNotificationPlan({
+      allStates: notificationEntries.map((entry) => entry.state),
+      focusTarget: null,
+      pushEligible: true,
+      nowMs: Date.now(),
+    });
+    this.sendAgentAttention({
+      agentId: target.entry.agentId,
+      provider: agent.provider,
+      reason: target.entry.reason,
+      awaitingInput: target.entry.awaitingInput,
+      tier: "caution",
+      notification,
+      plan,
+      clientEntries,
+      notificationEntries,
+    });
+  }
+
+  private sendAgentAttention(params: {
+    agentId: string;
+    provider: AgentProvider;
+    reason: "finished" | "error" | "permission";
+    awaitingInput?: boolean;
+    tier: AttentionTier;
+    notification: AgentAttentionNotificationPayload;
+    plan: NotificationPlan;
+    clientEntries: Array<{ ws: WebSocketLike; state: ClientPresenceState }>;
+    notificationEntries: Array<{ ws: WebSocketLike; state: ClientPresenceState }>;
+  }): void {
+    const { plan, notification, tier, notificationEntries } = params;
 
     if (plan.shouldPush) {
       void this.pushNotificationSender.send(notification).catch((err) => {
@@ -2844,7 +2971,7 @@ export class VoiceAssistantWebSocketServer {
       });
     }
 
-    for (const { ws } of clientEntries) {
+    for (const { ws } of params.clientEntries) {
       const shouldNotify =
         tier !== "advisory" &&
         plan.inAppRecipientIndex !== null &&

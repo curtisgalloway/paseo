@@ -1,6 +1,10 @@
 import { createWorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AttentionFocus } from "./attention-focus.js";
 import type { Server as HTTPServer } from "http";
 import type pino from "pino";
 import type { AgentManager } from "./agent/agent-manager.js";
@@ -37,6 +41,17 @@ vi.mock("ws", () => ({
   WebSocketServer: wsModuleMock.MockWebSocketServer,
 }));
 
+const tierOverride = vi.hoisted(() => ({ value: null as string | null }));
+
+vi.mock("./agent-attention-policy.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./agent-attention-policy.js")>();
+  return {
+    ...original,
+    attentionTier: (input: Parameters<typeof original.attentionTier>[0]) =>
+      tierOverride.value ?? original.attentionTier(input),
+  };
+});
+
 vi.mock("./session.js", () => ({
   Session: function Session() {
     return {};
@@ -47,6 +62,7 @@ import { VoiceAssistantWebSocketServer } from "./websocket-server.js";
 
 interface WebSocketServerInternals {
   sessions: Map<unknown, unknown>;
+  attentionFocus: AttentionFocus;
   broadcastAgentAttention(params: {
     agentId: string;
     reason: string;
@@ -83,7 +99,10 @@ class RecordingPushNotificationSender implements PushNotificationSender {
   }
 }
 
-function createServer(agentManagerOverrides?: Record<string, unknown>) {
+function createServer(
+  agentManagerOverrides?: Record<string, unknown>,
+  paseoHome = "/tmp/paseo-test",
+) {
   const pushNotifications = new RecordingPushNotificationSender();
   const agentManager = {
     subscribe: vi.fn(() => () => {}),
@@ -113,7 +132,7 @@ function createServer(agentManagerOverrides?: Record<string, unknown>) {
     createStub<AgentManager>(agentManager),
     createStub<AgentStorage>({}),
     createStub<DownloadTokenStore>({}),
-    "/tmp/paseo-test",
+    paseoHome,
     createStub<DaemonConfigStore>(daemonConfigStore),
     null,
     { allowedOrigins: new Set() },
@@ -202,6 +221,7 @@ function connectClient(
       ...createSessionWithActivity(activity, options.subscribed ?? true),
       delivery,
       wantsSourceNotification: () => true,
+      wantsSourceEvent: () => false,
     },
     clientId: "client-test",
     appVersion: null,
@@ -410,6 +430,160 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     });
 
     expect(readAttentionRequiredMessage(present).shouldNotify).toBe(true);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+});
+
+describe("VoiceAssistantWebSocketServer focus periods", () => {
+  const dirs: string[] = [];
+
+  function createFocusServer(agent: Record<string, unknown> = {}) {
+    const dir = mkdtempSync(join(tmpdir(), "paseo-focus-test-"));
+    dirs.push(dir);
+    const created = createServer(
+      {
+        getAgent: vi.fn(() => ({
+          config: { title: "Build bot" },
+          provider: "claude",
+          workspaceId: WORKSPACE_ID,
+          pendingPermissions: new Map(),
+          ...agent,
+        })),
+      },
+      dir,
+    );
+    return { ...created, internals: asInternals<WebSocketServerInternals>(created.server) };
+  }
+
+  function sentMessages(ws: ReturnType<typeof createOpenSocket>) {
+    return ws.send.mock.calls.map((call) => JSON.parse(call[0] as string).message);
+  }
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    tierOverride.value = null;
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("holds a caution event: delivered without notify or push, counted once per agent", async () => {
+    const { server, internals, pushNotifications } = createFocusServer();
+    const present = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: "other",
+      lastActivityAt: new Date(),
+    });
+    internals.attentionFocus.set(25 * 60_000);
+
+    for (const reason of ["permission", "finished"] as const) {
+      await internals.broadcastAgentAttention({
+        agentId: "agent-1",
+        provider: "claude",
+        reason,
+        awaitingInput: true,
+      });
+    }
+
+    const events = sentMessages(present).map((message) => message.payload.event);
+    expect(events.map((event) => event.type)).toEqual(["attention_required", "attention_required"]);
+    expect(events.map((event) => event.shouldNotify)).toEqual([false, false]);
+    expect(pushNotifications.sent).toEqual([]);
+    expect(internals.attentionFocus.getState().heldCount).toBe(1);
+  });
+
+  it("lets a warning break through focus", async () => {
+    const { server, internals } = createFocusServer();
+    const present = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: "other",
+      lastActivityAt: new Date(),
+    });
+    internals.attentionFocus.set(25 * 60_000);
+    tierOverride.value = "warning";
+
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "permission",
+    });
+
+    const [event] = sentMessages(present).map((message) => message.payload.event);
+    expect(event.shouldNotify).toBe(true);
+    expect(internals.attentionFocus.getState().heldCount).toBe(0);
+  });
+
+  it("does not hold advisory events", async () => {
+    const { internals } = createFocusServer();
+    internals.attentionFocus.set(25 * 60_000);
+
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "finished",
+    });
+
+    expect(internals.attentionFocus.getState().heldCount).toBe(0);
+  });
+
+  it("delivers one summary through caution routing when focus ends", async () => {
+    const { server, internals, pushNotifications } = createFocusServer();
+    const present = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: "other",
+      lastActivityAt: new Date(),
+    });
+    internals.attentionFocus.set(25 * 60_000);
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "permission",
+    });
+    present.send.mockClear();
+
+    internals.attentionFocus.set(null);
+    await vi.waitFor(() => expect(present.send).toHaveBeenCalled());
+
+    const events = sentMessages(present).map((message) => message.payload.event);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "attention_required",
+      shouldNotify: true,
+      notification: {
+        title: "Focus ended: 1 agent needs you",
+        body: "Build bot",
+        tier: "caution",
+        data: { agentId: "agent-1", workspaceId: WORKSPACE_ID },
+      },
+    });
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it("pushes the summary when no client is present", async () => {
+    const { internals, pushNotifications } = createFocusServer();
+    internals.attentionFocus.set(25 * 60_000);
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "error",
+    });
+
+    internals.attentionFocus.set(null);
+    await vi.waitFor(() => expect(pushNotifications.sent).toHaveLength(1));
+
+    expect(pushNotifications.sent[0]).toMatchObject({
+      title: "Focus ended: 1 agent needs you",
+      tier: "caution",
+    });
+  });
+
+  it("sends nothing when focus ends with nothing held", async () => {
+    const { internals, pushNotifications } = createFocusServer();
+    internals.attentionFocus.set(25 * 60_000);
+    internals.attentionFocus.set(null);
+    await Promise.resolve();
     expect(pushNotifications.sent).toEqual([]);
   });
 });

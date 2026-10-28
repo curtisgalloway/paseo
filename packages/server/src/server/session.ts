@@ -524,6 +524,9 @@ export interface SessionOptions {
     listLegacyUsage(): Promise<{ fetchedAt: string; providers: ProviderUsage[] }>;
   };
   orchestrationSkills?: import("./orchestration-skills/index.js").OrchestrationSkills;
+  attentionFocus?: {
+    set(durationMs: number | null): import("@getpaseo/protocol/messages").AttentionFocusState;
+  };
   mcpBaseUrl?: string | null;
   stt: Resolvable<SpeechToTextProvider | null>;
   sttLanguage?: string;
@@ -758,6 +761,7 @@ export class Session {
   private readonly pushNotifications: PushNotifications;
   private readonly pluginRuntime: SessionOptions["pluginRuntime"];
   private readonly orchestrationSkills: SessionOptions["orchestrationSkills"];
+  private readonly attentionFocus: SessionOptions["attentionFocus"];
   private unsubscribeAgentEvents: (() => void) | null = null;
   private unsubscribeProjectMutations: (() => void) | null = null;
   private unsubscribePluginChanges: (() => void) | null = null;
@@ -858,6 +862,7 @@ export class Session {
       daemonConfigStore,
       pluginRuntime,
       orchestrationSkills,
+      attentionFocus,
       stt,
       sttLanguage,
       tts,
@@ -909,6 +914,7 @@ export class Session {
     this.worktreesRoot = worktreesRoot;
     this.pluginRuntime = pluginRuntime;
     this.orchestrationSkills = orchestrationSkills;
+    this.attentionFocus = attentionFocus;
     this.sessionLogger = logger.child({
       module: "session",
       clientId: this.clientId,
@@ -2296,6 +2302,28 @@ export class Session {
     this.emitSubscribedEvent(message, source);
   }
 
+  private handleAttentionFocusSetRequest(
+    msg: Extract<SessionInboundMessage, { type: "attention.focus.set.request" }>,
+  ): void {
+    try {
+      if (!this.attentionFocus) throw new Error("Focus periods are unavailable");
+      const focus = this.attentionFocus.set(msg.durationMs);
+      this.emit({
+        type: "attention.focus.set.response",
+        payload: { requestId: msg.requestId, focus, error: null },
+      });
+    } catch (error) {
+      this.emit({
+        type: "attention.focus.set.response",
+        payload: {
+          requestId: msg.requestId,
+          focus: null,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
   public wantsSourceEvent(source: object, event: SessionEventSubscription): boolean {
     return this.wantsEvent(event, source);
   }
@@ -2911,6 +2939,9 @@ export class Session {
         return this.daemonSession.handleGetPairingOfferRequest(msg);
       case "daemon.config.reload.request":
         this.daemonSession.handleConfigReloadRequest(msg);
+        return undefined;
+      case "attention.focus.set.request":
+        this.handleAttentionFocusSetRequest(msg);
         return undefined;
       case "hub.management.daemon.connect.request":
       case "hub.management.daemon.get_status.request":

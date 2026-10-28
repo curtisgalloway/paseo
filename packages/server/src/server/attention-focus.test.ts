@@ -50,7 +50,13 @@ describe("AttentionFocus", () => {
   it("starts inactive", () => {
     const focus = create();
     focus.start();
-    expect(focus.getState()).toEqual({ active: false, until: null, source: null, heldCount: 0 });
+    expect(focus.getState()).toEqual({
+      active: false,
+      until: null,
+      startedAt: null,
+      source: null,
+      heldCount: 0,
+    });
   });
 
   it("starts, replaces, and ends a period", () => {
@@ -60,13 +66,16 @@ describe("AttentionFocus", () => {
     expect(focus.set(25 * MINUTE)).toEqual({
       active: true,
       until: "2026-10-27T12:25:00.000Z",
+      startedAt: "2026-10-27T12:00:00.000Z",
       source: "manual",
       heldCount: 0,
     });
 
     focus.hold(entry("a"));
+    vi.advanceTimersByTime(5 * MINUTE);
     expect(focus.set(60 * MINUTE)).toMatchObject({
-      until: "2026-10-27T13:00:00.000Z",
+      startedAt: "2026-10-27T12:05:00.000Z",
+      until: "2026-10-27T13:05:00.000Z",
       heldCount: 1,
     });
 
@@ -133,6 +142,7 @@ describe("AttentionFocus", () => {
     second.start();
 
     expect(second.getState()).toMatchObject({
+      startedAt: "2026-10-27T12:00:00.000Z",
       active: true,
       until: "2026-10-27T12:25:00.000Z",
       heldCount: 1,
@@ -160,6 +170,16 @@ describe("AttentionFocus", () => {
     const third = create();
     third.start();
     expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a persisted period without startedAt as unknown", () => {
+    writeFileSync(
+      filePath,
+      JSON.stringify({ until: "2026-10-27T12:25:00.000Z", source: "manual", held: [] }),
+    );
+    const focus = create();
+    focus.start();
+    expect(focus.getState()).toMatchObject({ active: true, startedAt: null });
   });
 
   it("ignores a corrupt file", () => {

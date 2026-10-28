@@ -17,6 +17,7 @@ export interface HeldAttentionEntry {
 
 interface PersistedFocus {
   until: string | null;
+  startedAt?: string | null;
   source: string | null;
   held: HeldAttentionEntry[];
 }
@@ -37,6 +38,7 @@ interface AttentionFocusOptions {
  */
 export class AttentionFocus {
   private until: number | null = null;
+  private startedAt: number | null = null;
   private source: string | null = null;
   private held: HeldAttentionEntry[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -53,6 +55,8 @@ export class AttentionFocus {
       const until = Date.parse(persisted.until);
       if (Number.isFinite(until)) {
         this.until = until;
+        const started = persisted.startedAt ? Date.parse(persisted.startedAt) : Number.NaN;
+        this.startedAt = Number.isFinite(started) ? started : null;
         this.source = persisted.source;
         this.held = persisted.held;
       }
@@ -76,6 +80,7 @@ export class AttentionFocus {
     return {
       active,
       until: active && this.until !== null ? new Date(this.until).toISOString() : null,
+      startedAt: active && this.startedAt !== null ? new Date(this.startedAt).toISOString() : null,
       source: active ? this.source : null,
       heldCount: active ? this.held.length : 0,
     };
@@ -97,6 +102,7 @@ export class AttentionFocus {
     if (!this.isActive()) {
       this.held = [];
     }
+    this.startedAt = this.now();
     this.until = this.now() + durationMs;
     this.source = "manual";
     this.persist();
@@ -116,6 +122,7 @@ export class AttentionFocus {
     const held = this.held;
     this.clearTimer();
     this.until = null;
+    this.startedAt = null;
     this.source = null;
     this.held = [];
     this.persist();
@@ -152,6 +159,7 @@ export class AttentionFocus {
       ) as Partial<PersistedFocus>;
       return {
         until: typeof raw.until === "string" ? raw.until : null,
+        startedAt: typeof raw.startedAt === "string" ? raw.startedAt : null,
         source: typeof raw.source === "string" ? raw.source : null,
         held: Array.isArray(raw.held) ? raw.held : [],
       };
@@ -166,6 +174,7 @@ export class AttentionFocus {
   private persist(): void {
     const data: PersistedFocus = {
       until: this.until === null ? null : new Date(this.until).toISOString(),
+      startedAt: this.startedAt === null ? null : new Date(this.startedAt).toISOString(),
       source: this.source,
       held: this.held,
     };

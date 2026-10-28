@@ -133,7 +133,9 @@ function FocusRow({ serverId }: { serverId: string }) {
             </View>
             {active ? (
               <View style={styles.track} testID="sidebar-focus-bar">
-                <View style={[styles.fill, { width: `${focusBarFraction(remainingMs) * 100}%` }]} />
+                <View
+                  style={[styles.fill, { width: `${focusBarFraction(remainingMs, focus) * 100}%` }]}
+                />
               </View>
             ) : null}
           </View>

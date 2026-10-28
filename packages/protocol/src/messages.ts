@@ -3625,6 +3625,8 @@ const ServerCapabilitiesFromUnknownSchema = z
 export const AttentionFocusStateSchema = z.object({
   active: z.boolean(),
   until: z.string().nullable(),
+  // COMPAT(attentionFocusStartedAt): optional while daemons that omit it are supported.
+  startedAt: z.string().nullable().optional(),
   source: z.string().nullable(),
   heldCount: z.number(),
 });

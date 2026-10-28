@@ -51,4 +51,17 @@ describe("focusBarFraction", () => {
   it("shows a full bar for a period longer than any option", () => {
     expect(focusBarFraction(3 * 60 * MINUTE)).toBe(1);
   });
+
+  it("uses startedAt..until when present", () => {
+    const period = { startedAt: "2026-10-27T12:00:00.000Z", until: "2026-10-27T12:40:00.000Z" };
+    expect(focusBarFraction(30 * MINUTE, period)).toBeCloseTo(0.75, 5);
+    expect(focusBarFraction(40 * MINUTE, period)).toBe(1);
+    expect(focusBarFraction(0, period)).toBe(0);
+  });
+
+  it("falls back to the guess when startedAt is missing", () => {
+    expect(
+      focusBarFraction(20 * MINUTE, { startedAt: null, until: "2026-10-27T12:20:00.000Z" }),
+    ).toBeCloseTo(20 / 25, 5);
+  });
 });

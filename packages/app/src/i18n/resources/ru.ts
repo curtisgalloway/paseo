@@ -1251,6 +1251,18 @@ export const ru: TranslationResources = {
     footer: {
       usage: "Использование",
     },
+    focus: {
+      label: "Фокус",
+      minutesLeft: "осталось {{minutes}} мин",
+      lessThanMinuteLeft: "осталось <1 мин",
+      held: "отложено: {{count}}",
+      end: "Завершить фокус",
+      duration25: "25 минут",
+      duration60: "1 час",
+      duration120: "2 часа",
+      accessibilityInactive: "Фокус. Отложить уведомления агентов на некоторое время.",
+      accessibilityActive: "Фокус включён: {{details}}",
+    },
     help: {
       trigger: "Помощь и поддержка",
       sectionHelp: "Помощь",

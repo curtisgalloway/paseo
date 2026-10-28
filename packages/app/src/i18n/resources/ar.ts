@@ -1233,6 +1233,18 @@ export const ar: TranslationResources = {
     footer: {
       usage: "الاستخدام",
     },
+    focus: {
+      label: "التركيز",
+      minutesLeft: "متبقي {{minutes}} دقيقة",
+      lessThanMinuteLeft: "متبقي أقل من دقيقة",
+      held: "{{count}} معلّقة",
+      end: "إنهاء التركيز",
+      duration25: "25 دقيقة",
+      duration60: "ساعة واحدة",
+      duration120: "ساعتان",
+      accessibilityInactive: "التركيز. تعليق إشعارات الوكلاء لفترة.",
+      accessibilityActive: "التركيز نشط: {{details}}",
+    },
     help: {
       trigger: "المساعدة والدعم",
       sectionHelp: "المساعدة",

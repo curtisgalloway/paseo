@@ -1263,6 +1263,19 @@ export const fr: TranslationResources = {
     footer: {
       usage: "Utilisation",
     },
+    focus: {
+      label: "Concentration",
+      minutesLeft: "{{minutes}} min restantes",
+      lessThanMinuteLeft: "<1 min restante",
+      held: "{{count}} en attente",
+      end: "Terminer la concentration",
+      duration25: "25 minutes",
+      duration60: "1 heure",
+      duration120: "2 heures",
+      accessibilityInactive:
+        "Concentration. Retenir les notifications des agents pendant un moment.",
+      accessibilityActive: "Concentration active : {{details}}",
+    },
     help: {
       trigger: "Aide et assistance",
       sectionHelp: "Aide",

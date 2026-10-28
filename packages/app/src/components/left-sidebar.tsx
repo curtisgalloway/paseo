@@ -32,6 +32,7 @@ import { HostPicker } from "@/components/hosts/host-picker";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
+import { FocusSidebarItem, useFocusAvailable } from "@/attention-focus/sidebar-item";
 import { SidebarFooterIconHighlight } from "@/components/sidebar/sidebar-footer-icon-highlight";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
 import { SidebarResizeHandle } from "@/components/sidebar-resize-handle";
@@ -481,14 +482,16 @@ function SidebarUsageIcon({ label }: { label: string }) {
 function SidebarFooterRows({ onBeforeNavigate }: { onBeforeNavigate?: () => void }) {
   const { items } = useSidebarNavItems("footer");
   const hasUsageSummary = useHasUsageSummary();
+  const hasFocus = useFocusAvailable();
   const rowsRef = useRef<View | null>(null);
   const visibleItems = items.filter(
     (item) => item.visible && (item.kind === "plugin" || hasUsageSummary),
   );
-  if (visibleItems.length === 0) return null;
+  if (visibleItems.length === 0 && !hasFocus) return null;
   return (
     <>
       <View ref={rowsRef} collapsable={false} style={styles.footerRows}>
+        <FocusSidebarItem />
         {visibleItems.map((item) =>
           item.kind === "plugin" ? (
             <PluginSidebarItem

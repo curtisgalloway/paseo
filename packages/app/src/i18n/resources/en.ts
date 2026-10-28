@@ -1241,6 +1241,18 @@ export const en = {
     footer: {
       usage: "Usage",
     },
+    focus: {
+      label: "Focus",
+      minutesLeft: "{{minutes}} min left",
+      lessThanMinuteLeft: "<1 min left",
+      held: "{{count}} held",
+      end: "End focus",
+      duration25: "25 minutes",
+      duration60: "1 hour",
+      duration120: "2 hours",
+      accessibilityInactive: "Focus. Hold agent notifications for a while.",
+      accessibilityActive: "Focus active: {{details}}",
+    },
     help: {
       trigger: "Help and support",
       sectionHelp: "Help",

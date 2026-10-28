@@ -278,6 +278,7 @@ export interface DaemonServerInfo {
   desktopManaged?: boolean;
   capabilities?: ServerCapabilities;
   features?: ServerInfoStatusPayload["features"];
+  attentionFocus?: ServerInfoStatusPayload["attentionFocus"];
 }
 
 export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonServerInfo {
@@ -290,6 +291,7 @@ export function toDaemonServerInfo(serverInfo: ServerInfoStatusPayload): DaemonS
       : {}),
     ...(serverInfo.capabilities ? { capabilities: serverInfo.capabilities } : {}),
     ...(serverInfo.features ? { features: serverInfo.features } : {}),
+    ...(serverInfo.attentionFocus ? { attentionFocus: serverInfo.attentionFocus } : {}),
   };
 }
 
@@ -685,6 +687,7 @@ function isSessionServerInfoUnchanged(input: {
   nextDesktopManaged: boolean | undefined;
   nextCapabilities: ServerCapabilities | undefined;
   nextFeatures: ServerInfoStatusPayload["features"] | undefined;
+  nextAttentionFocus: ServerInfoStatusPayload["attentionFocus"] | undefined;
   nextServerId: string;
 }): boolean {
   const {
@@ -703,7 +706,9 @@ function isSessionServerInfoUnchanged(input: {
     prevVersion === nextVersion &&
     currentServerInfo?.desktopManaged === nextDesktopManaged &&
     areServerCapabilitiesEqual(currentServerInfo?.capabilities, nextCapabilities) &&
-    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures)
+    areServerInfoFeaturesEqual(currentServerInfo?.features, nextFeatures) &&
+    JSON.stringify(currentServerInfo?.attentionFocus ?? null) ===
+      JSON.stringify(input.nextAttentionFocus ?? null)
   );
 }
 
@@ -841,6 +846,7 @@ export const useSessionStore = create<SessionStore>()(
           const nextDesktopManaged = info.desktopManaged;
           const nextCapabilities = info.capabilities;
           const nextFeatures = info.features;
+          const nextAttentionFocus = info.attentionFocus;
 
           if (
             isSessionServerInfoUnchanged({
@@ -850,6 +856,7 @@ export const useSessionStore = create<SessionStore>()(
               nextDesktopManaged,
               nextCapabilities,
               nextFeatures,
+              nextAttentionFocus,
               nextServerId: info.serverId,
             })
           ) {
@@ -871,6 +878,7 @@ export const useSessionStore = create<SessionStore>()(
                     : {}),
                   ...(nextCapabilities ? { capabilities: nextCapabilities } : {}),
                   ...(nextFeatures ? { features: nextFeatures } : {}),
+                  ...(nextAttentionFocus ? { attentionFocus: nextAttentionFocus } : {}),
                 },
               },
             },

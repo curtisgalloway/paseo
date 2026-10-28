@@ -1259,6 +1259,18 @@ export const ptBR: TranslationResources = {
     footer: {
       usage: "Uso",
     },
+    focus: {
+      label: "Foco",
+      minutesLeft: "{{minutes}} min restantes",
+      lessThanMinuteLeft: "<1 min restante",
+      held: "{{count}} retidas",
+      end: "Encerrar foco",
+      duration25: "25 minutos",
+      duration60: "1 hora",
+      duration120: "2 horas",
+      accessibilityInactive: "Foco. Reter as notificações dos agentes por um tempo.",
+      accessibilityActive: "Foco ativo: {{details}}",
+    },
     help: {
       trigger: "Ajuda e suporte",
       sectionHelp: "Ajuda",

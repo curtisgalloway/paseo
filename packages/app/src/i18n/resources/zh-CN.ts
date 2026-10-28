@@ -1225,6 +1225,18 @@ export const zhCN: TranslationResources = {
     footer: {
       usage: "使用情况",
     },
+    focus: {
+      label: "专注",
+      minutesLeft: "剩余 {{minutes}} 分钟",
+      lessThanMinuteLeft: "剩余不足 1 分钟",
+      held: "{{count}} 条已暂存",
+      end: "结束专注",
+      duration25: "25 分钟",
+      duration60: "1 小时",
+      duration120: "2 小时",
+      accessibilityInactive: "专注。暂时暂存智能体通知。",
+      accessibilityActive: "专注进行中：{{details}}",
+    },
     help: {
       trigger: "帮助与支持",
       sectionHelp: "帮助",

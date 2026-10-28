@@ -1247,6 +1247,18 @@ export const ja: TranslationResources = {
     footer: {
       usage: "使用状況",
     },
+    focus: {
+      label: "集中モード",
+      minutesLeft: "残り{{minutes}}分",
+      lessThanMinuteLeft: "残り1分未満",
+      held: "{{count}}件保留中",
+      end: "集中モードを終了",
+      duration25: "25分",
+      duration60: "1時間",
+      duration120: "2時間",
+      accessibilityInactive: "集中モード。しばらくエージェントの通知を保留します。",
+      accessibilityActive: "集中モード実行中: {{details}}",
+    },
     help: {
       trigger: "ヘルプとサポート",
       sectionHelp: "ヘルプ",

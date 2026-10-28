@@ -1269,6 +1269,18 @@ export const es: TranslationResources = {
     footer: {
       usage: "Uso",
     },
+    focus: {
+      label: "Concentración",
+      minutesLeft: "{{minutes}} min restantes",
+      lessThanMinuteLeft: "<1 min restante",
+      held: "{{count}} retenidas",
+      end: "Terminar concentración",
+      duration25: "25 minutos",
+      duration60: "1 hora",
+      duration120: "2 horas",
+      accessibilityInactive: "Concentración. Retener las notificaciones de agentes por un tiempo.",
+      accessibilityActive: "Concentración activa: {{details}}",
+    },
     help: {
       trigger: "Ayuda y soporte",
       sectionHelp: "Ayuda",

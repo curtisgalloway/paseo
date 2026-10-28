@@ -1240,6 +1240,18 @@ export const ko: TranslationResources = {
     footer: {
       usage: "사용량",
     },
+    focus: {
+      label: "집중",
+      minutesLeft: "{{minutes}}분 남음",
+      lessThanMinuteLeft: "1분 미만 남음",
+      held: "{{count}}건 보류",
+      end: "집중 종료",
+      duration25: "25분",
+      duration60: "1시간",
+      duration120: "2시간",
+      accessibilityInactive: "집중. 한동안 에이전트 알림을 보류합니다.",
+      accessibilityActive: "집중 진행 중: {{details}}",
+    },
     help: {
       trigger: "도움말 및 지원",
       sectionHelp: "도움말",

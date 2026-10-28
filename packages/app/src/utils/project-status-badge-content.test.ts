@@ -10,13 +10,13 @@ describe("getProjectStatusBadgeContent", () => {
     expect(getProjectStatusBadgeContent("needs_input")).toEqual({ kind: "alert" });
   });
 
-  it("shows a failed dot when a workspace failed", () => {
-    expect(getProjectStatusBadgeContent("failed")).toEqual({ kind: "dot", bucket: "failed" });
+  it("shows a failed glyph when a workspace failed", () => {
+    expect(getProjectStatusBadgeContent("failed")).toEqual({ kind: "glyph", bucket: "failed" });
   });
 
-  it("shows an attention dot when a workspace awaits review", () => {
+  it("shows an attention glyph when a workspace awaits review", () => {
     expect(getProjectStatusBadgeContent("attention")).toEqual({
-      kind: "dot",
+      kind: "glyph",
       bucket: "attention",
     });
   });

@@ -1,9 +1,11 @@
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 
-export type ProjectStatusBadgeDotBucket = "failed" | "attention" | "running";
+export type ProjectStatusBadgeDotBucket = "running";
+export type ProjectStatusBadgeGlyphBucket = "failed" | "attention";
 
 export type ProjectStatusBadgeContent =
   | { kind: "alert" }
+  | { kind: "glyph"; bucket: ProjectStatusBadgeGlyphBucket }
   | { kind: "dot"; bucket: ProjectStatusBadgeDotBucket };
 
 /**
@@ -11,10 +13,10 @@ export type ProjectStatusBadgeContent =
  * no badge should show at all. Kept as plain data (no React) so it's testable without JSDOM
  * or component mounting — see docs/testing.md's two test categories.
  *
- * Running is a dot like failed and attention rather than its own glyph. The badge is 14pt;
- * anything with internal detail at that size loses to a solid disc, so the buckets separate
- * by color and — for running alone — by pulsing. Only needs_input earns a glyph, because
- * "someone must act" has to survive being the one amber state next to running.
+ * Running is a dot rather than its own glyph. The badge is 14pt; anything with internal detail
+ * at that size loses to a solid disc, so running separates by color and by pulsing. Every state
+ * that needs a person carries its own shape as well as a color (alert, X, check), so failed and
+ * ready-for-review never differ by red versus green alone.
  */
 export function getProjectStatusBadgeContent(
   statusBucket: SidebarStateBucket | null,
@@ -22,7 +24,10 @@ export function getProjectStatusBadgeContent(
   if (statusBucket === "needs_input") {
     return { kind: "alert" };
   }
-  if (statusBucket === "failed" || statusBucket === "attention" || statusBucket === "running") {
+  if (statusBucket === "failed" || statusBucket === "attention") {
+    return { kind: "glyph", bucket: statusBucket };
+  }
+  if (statusBucket === "running") {
     return { kind: "dot", bucket: statusBucket };
   }
   return null;

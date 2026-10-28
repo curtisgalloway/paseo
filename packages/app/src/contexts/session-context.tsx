@@ -264,7 +264,8 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
       const appState = appStateRef.current;
       const session = useSessionStore.getState().sessions[serverId];
       const attentionFocusedAgentId = session?.focusedAgentId ?? null;
-      if (params.reason === "error") {
+      // A tiered daemon decides which errors notify; an older one never meant them to.
+      if (params.reason === "error" && !params.notification?.tier) {
         return;
       }
       const isActivelyVisible = getIsAppActivelyVisible(appState);

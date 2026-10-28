@@ -799,6 +799,7 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
       .object({
         title: z.string(),
         body: z.string(),
+        tier: z.enum(["warning", "caution", "advisory"]).optional(),
         data: z.object({
           serverId: z.string(),
           workspaceId: z.string().optional(),
@@ -4904,6 +4905,7 @@ export const AgentAttentionRequiredMessageSchema = z.object({
       .object({
         title: z.string(),
         body: z.string(),
+        tier: z.enum(["warning", "caution", "advisory"]).optional(),
         data: z.object({
           serverId: z.string(),
           workspaceId: z.string().optional(),

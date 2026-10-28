@@ -83,6 +83,7 @@ import type { SpeechReadinessSnapshot, SpeechService } from "./speech/speech-run
 import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import {
   computeNotificationPlan,
+  attentionTier,
   isPushEligibleAttentionReason,
   type ClientPresenceState,
 } from "./agent-attention-policy.js";
@@ -2814,6 +2815,7 @@ export class VoiceAssistantWebSocketServer {
     const allStates = notificationEntries.map((e) => e.state);
     const nowMs = Date.now();
     const assistantMessage = await this.agentManager.getLastAssistantMessage(params.agentId);
+    const tier = attentionTier({ reason: params.reason, awaitingInput: params.awaitingInput });
     const notification = buildAgentAttentionNotificationPayload({
       reason: params.reason,
       serverId: this.serverId,
@@ -2821,6 +2823,7 @@ export class VoiceAssistantWebSocketServer {
       agentId: params.agentId,
       agentTitle: agent.config?.title ?? null,
       awaitingInput: params.awaitingInput,
+      tier,
       assistantMessage,
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
@@ -2828,7 +2831,10 @@ export class VoiceAssistantWebSocketServer {
     const plan = computeNotificationPlan({
       allStates,
       focusTarget: { kind: "agent", id: params.agentId },
-      pushEligible: isPushEligibleAttentionReason(params.reason),
+      pushEligible: isPushEligibleAttentionReason({
+        reason: params.reason,
+        awaitingInput: params.awaitingInput,
+      }),
       nowMs,
     });
 
@@ -2840,6 +2846,7 @@ export class VoiceAssistantWebSocketServer {
 
     for (const { ws } of clientEntries) {
       const shouldNotify =
+        tier !== "advisory" &&
         plan.inAppRecipientIndex !== null &&
         notificationEntries[plan.inAppRecipientIndex]?.ws === ws;
       const timestamp = new Date().toISOString();

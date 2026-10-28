@@ -10,9 +10,13 @@ export interface AgentAttentionNotificationData {
   reason: AgentAttentionReason;
 }
 
+export type AgentAttentionTier = "warning" | "caution" | "advisory";
+
 export interface AgentAttentionNotificationPayload {
   title: string;
   body: string;
+  /** Only "warning" is allowed to make a sound. Absent on payloads from older daemons. */
+  tier?: AgentAttentionTier;
   data: AgentAttentionNotificationData;
 }
 
@@ -24,6 +28,7 @@ interface BuildAgentAttentionNotificationPayloadInput {
   agentTitle?: string | null;
   /** The agent ended its turn asking the user something. */
   awaitingInput?: boolean;
+  tier?: AgentAttentionTier;
   assistantMessage?: string | null;
   permissionRequest?: NotificationPermissionRequest | null;
 }
@@ -211,6 +216,7 @@ export function buildAgentAttentionNotificationPayload(
   return {
     title,
     body,
+    ...(input.tier ? { tier: input.tier } : {}),
     data: {
       serverId: input.serverId,
       workspaceId: input.workspaceId,

@@ -7,6 +7,7 @@ interface NotificationInput {
   title?: unknown;
   body?: unknown;
   data?: unknown;
+  tier?: unknown;
 }
 
 interface NotificationClickPayload {
@@ -97,11 +98,14 @@ export function registerNotificationHandlers(): void {
     const data = toRecord(rawInput?.data);
     const icon = getNotificationIcon();
     const settings = await getDesktopSettingsStore().get();
+    // Only warning-tier notifications may make a sound; a payload without a tier keeps the setting.
+    const tier = rawInput?.tier;
+    const tierAllowsSound = tier === undefined || tier === "warning";
     const notification = new Notification({
       title,
       ...(body ? { body } : {}),
       ...(icon ? { icon } : {}),
-      silent: !settings.notifications.playSound,
+      silent: !settings.notifications.playSound || !tierAllowsSound,
     });
 
     activeNotifications.add(notification);

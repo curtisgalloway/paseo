@@ -304,6 +304,7 @@ function SessionProviderInternal({ children, serverId, client }: SessionProvider
         title: notification.title,
         body: notification.body,
         data: notification.data,
+        tier: notification.tier,
       });
     },
     [serverId],

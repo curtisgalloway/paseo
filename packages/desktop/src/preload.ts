@@ -88,8 +88,12 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
   },
   notification: {
     isSupported: () => ipcRenderer.invoke("paseo:notification:isSupported"),
-    sendNotification: (payload: { title: string; body?: string; data?: Record<string, unknown> }) =>
-      ipcRenderer.invoke("paseo:notification:send", payload),
+    sendNotification: (payload: {
+      title: string;
+      body?: string;
+      data?: Record<string, unknown>;
+      tier?: "warning" | "caution" | "advisory";
+    }) => ipcRenderer.invoke("paseo:notification:send", payload),
   },
   opener: {
     openUrl: (url: string) => ipcRenderer.invoke("paseo:opener:openUrl", url),

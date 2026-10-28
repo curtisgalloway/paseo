@@ -75,6 +75,22 @@ export function computeNotificationPlan({
   return { inAppRecipientIndex: null, shouldPush: pushEligible };
 }
 
-export function isPushEligibleAttentionReason(reason: AgentAttentionReason): boolean {
-  return reason !== "error";
+export type AttentionTier = "warning" | "caution" | "advisory";
+
+// Nothing returns "warning" yet; it is reserved for destructive actions and runaway spend.
+export function attentionTier(input: {
+  reason: AgentAttentionReason;
+  awaitingInput?: boolean;
+}): AttentionTier {
+  if (input.reason === "finished" && !input.awaitingInput) {
+    return "advisory";
+  }
+  return "caution";
+}
+
+export function isPushEligibleAttentionReason(input: {
+  reason: AgentAttentionReason;
+  awaitingInput?: boolean;
+}): boolean {
+  return attentionTier(input) !== "advisory";
 }

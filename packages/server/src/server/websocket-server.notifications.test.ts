@@ -246,6 +246,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-1",
       provider: "claude",
       reason: "finished",
+      awaitingInput: true,
     });
 
     expect(unsubscribed.send).not.toHaveBeenCalled();
@@ -270,12 +271,14 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-1",
       provider: "claude",
       reason: "finished",
+      awaitingInput: true,
     });
 
     expect(pushNotifications.sent).toEqual([
       {
-        title: "Agent finished",
+        title: "Agent is waiting for you",
         body: "Done. Updated README.md and link.",
+        tier: "caution",
         data: {
           serverId: "srv-test",
           workspaceId: WORKSPACE_ID,
@@ -304,6 +307,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-2",
       provider: "claude",
       reason: "finished",
+      awaitingInput: true,
     });
 
     expect(pushNotifications.sent).toHaveLength(1);
@@ -330,6 +334,7 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-X",
       provider: "claude",
       reason: "finished",
+      awaitingInput: true,
     });
 
     expect(readAttentionRequiredMessage(electronWs).shouldNotify).toBe(true);
@@ -345,13 +350,14 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
       agentId: "agent-no-heartbeat",
       provider: "claude",
       reason: "finished",
+      awaitingInput: true,
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
     expect(pushNotifications.sent).toHaveLength(1);
   });
 
-  it("does not push error attention when the only connected client has never sent a heartbeat", async () => {
+  it("pushes error attention when the only connected client has never sent a heartbeat", async () => {
     const { server, pushNotifications } = createServer();
     const ws = connectClient(server, null);
 
@@ -362,6 +368,48 @@ describe("VoiceAssistantWebSocketServer notification payloads", () => {
     });
 
     expect(readAttentionRequiredMessage(ws).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toHaveLength(1);
+    expect(pushNotifications.sent[0]).toMatchObject({ tier: "caution" });
+  });
+
+  it("keeps a finished turn that asks nothing silent: no notify, no push", async () => {
+    const { server, pushNotifications } = createServer();
+    const present = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: "other",
+      lastActivityAt: new Date(),
+    });
+    const away = connectClient(server, null);
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-quiet",
+      provider: "claude",
+      reason: "finished",
+    });
+
+    expect(readAttentionRequiredMessage(present).shouldNotify).toBe(false);
+    expect(readAttentionRequiredMessage(away).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it("notifies the present client when a finished turn ends with a question", async () => {
+    const { server, pushNotifications } = createServer();
+    const present = connectClient(server, {
+      deviceType: "web",
+      appVisible: false,
+      focusedAgentId: "other",
+      lastActivityAt: new Date(),
+    });
+
+    await asInternals<WebSocketServerInternals>(server).broadcastAgentAttention({
+      agentId: "agent-asking",
+      provider: "claude",
+      reason: "finished",
+      awaitingInput: true,
+    });
+
+    expect(readAttentionRequiredMessage(present).shouldNotify).toBe(true);
     expect(pushNotifications.sent).toEqual([]);
   });
 });

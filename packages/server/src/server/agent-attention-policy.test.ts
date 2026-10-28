@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNotificationPlan,
+  attentionTier,
   isPushEligibleAttentionReason,
   type ClientPresenceState,
   PRESENCE_THRESHOLD_MS,
@@ -225,10 +226,21 @@ describe("computeNotificationPlan", () => {
   });
 });
 
+describe("attentionTier", () => {
+  it("maps each attention event to its tier", () => {
+    expect(attentionTier({ reason: "permission" })).toBe("caution");
+    expect(attentionTier({ reason: "error" })).toBe("caution");
+    expect(attentionTier({ reason: "finished", awaitingInput: true })).toBe("caution");
+    expect(attentionTier({ reason: "finished", awaitingInput: false })).toBe("advisory");
+    expect(attentionTier({ reason: "finished" })).toBe("advisory");
+  });
+});
+
 describe("isPushEligibleAttentionReason", () => {
-  it("allows push for finished and permission but not error", () => {
-    expect(isPushEligibleAttentionReason("finished")).toBe(true);
-    expect(isPushEligibleAttentionReason("permission")).toBe(true);
-    expect(isPushEligibleAttentionReason("error")).toBe(false);
+  it("allows push for caution events and never for advisory ones", () => {
+    expect(isPushEligibleAttentionReason({ reason: "permission" })).toBe(true);
+    expect(isPushEligibleAttentionReason({ reason: "error" })).toBe(true);
+    expect(isPushEligibleAttentionReason({ reason: "finished", awaitingInput: true })).toBe(true);
+    expect(isPushEligibleAttentionReason({ reason: "finished" })).toBe(false);
   });
 });

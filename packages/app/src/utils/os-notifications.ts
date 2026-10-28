@@ -7,6 +7,8 @@ interface OsNotificationPayload {
   title: string;
   body?: string;
   data?: Record<string, unknown>;
+  /** Only "warning" may make a sound. Absent keeps the platform default. */
+  tier?: "warning" | "caution" | "advisory";
 }
 
 export interface WebNotificationClickDetail {
@@ -26,6 +28,7 @@ function getDesktopNotificationSender():
       title: string;
       body?: string;
       data?: Record<string, unknown>;
+      tier?: "warning" | "caution" | "advisory";
     }) => Promise<boolean>)
   | null {
   const sendNotification = getDesktopHost()?.notification?.sendNotification;
@@ -34,6 +37,7 @@ function getDesktopNotificationSender():
         title: string;
         body?: string;
         data?: Record<string, unknown>;
+        tier?: "warning" | "caution" | "advisory";
       }) => Promise<boolean>)
     : null;
 }
@@ -47,6 +51,7 @@ function getWebNotificationConstructor(): {
       body?: string;
       data?: Record<string, unknown>;
       icon?: string;
+      silent?: boolean;
     },
   ): unknown;
 } | null {
@@ -57,7 +62,12 @@ function getWebNotificationConstructor(): {
         requestPermission?: () => Promise<string>;
         new (
           title: string,
-          options?: { body?: string; data?: Record<string, unknown>; icon?: string },
+          options?: {
+            body?: string;
+            data?: Record<string, unknown>;
+            icon?: string;
+            silent?: boolean;
+          },
         ): unknown;
       };
     }
@@ -177,6 +187,7 @@ export async function sendOsNotification(payload: OsNotificationPayload): Promis
         body: payload.body,
         data: payload.data,
         icon: getWebNotificationIconUrl(),
+        ...(payload.tier !== undefined && payload.tier !== "warning" ? { silent: true } : {}),
       }) as WebNotificationInstance;
       attachWebClickHandler(notification, payload.data);
       return true;

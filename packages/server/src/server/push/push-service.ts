@@ -4,6 +4,8 @@ export interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, unknown>;
+  /** Only "warning" plays a sound. */
+  tier?: "warning" | "caution" | "advisory";
 }
 
 interface ExpoPushMessage {
@@ -47,7 +49,7 @@ export class PushService {
       title: payload.title,
       body: payload.body,
       data: payload.data,
-      sound: "default",
+      ...(payload.tier === "warning" ? { sound: "default" as const } : {}),
     }));
 
     // Batch tokens (max 100 per request per Expo limits)

@@ -792,6 +792,7 @@ export const AgentStreamEventPayloadSchema = z.discriminatedUnion("type", [
     type: z.literal("attention_required"),
     provider: AgentProviderSchema,
     reason: z.enum(["finished", "error", "permission"]),
+    awaitingInput: z.boolean().optional(),
     timestamp: z.string(),
     shouldNotify: z.boolean(),
     notification: z
@@ -857,6 +858,7 @@ export const AgentSnapshotPayloadSchema = z.object({
   title: z.string().nullable(),
   labels: z.record(z.string(), z.string()).default({}),
   requiresAttention: z.boolean().optional(),
+  awaitingInput: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
   archivedAt: z.string().nullable().optional(),
@@ -882,6 +884,7 @@ export const AgentListItemPayloadSchema = z.object({
   lastUserMessageAt: z.string().nullable(),
   archivedAt: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
+  awaitingInput: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
   labels: z.record(z.string(), z.string()).default({}),
@@ -4894,6 +4897,7 @@ export const AgentAttentionRequiredMessageSchema = z.object({
     subscriptionId: z.string().optional(),
     agentId: z.string(),
     reason: z.enum(["finished", "error", "permission"]),
+    awaitingInput: z.boolean().optional(),
     timestamp: z.string(),
     shouldNotify: z.boolean(),
     notification: z

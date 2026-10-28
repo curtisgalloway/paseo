@@ -2784,6 +2784,7 @@ export class VoiceAssistantWebSocketServer {
     agentId: string;
     provider: AgentProvider;
     reason: "finished" | "error" | "permission";
+    awaitingInput?: boolean;
   }): Promise<void> {
     const agent = this.agentManager.getAgent(params.agentId);
     if (!agent?.workspaceId) {
@@ -2818,6 +2819,8 @@ export class VoiceAssistantWebSocketServer {
       serverId: this.serverId,
       workspaceId: agent.workspaceId,
       agentId: params.agentId,
+      agentTitle: agent.config?.title ?? null,
+      awaitingInput: params.awaitingInput,
       assistantMessage,
       permissionRequest: findLatestPermissionRequest(agent.pendingPermissions),
     });
@@ -2844,6 +2847,7 @@ export class VoiceAssistantWebSocketServer {
       const attentionPayload = {
         agentId: params.agentId,
         reason: params.reason,
+        awaitingInput: params.awaitingInput,
         timestamp,
         shouldNotify,
         notification,
@@ -2863,6 +2867,7 @@ export class VoiceAssistantWebSocketServer {
                   type: "attention_required",
                   provider: params.provider,
                   reason: params.reason,
+                  awaitingInput: params.awaitingInput,
                   timestamp,
                   shouldNotify,
                   notification,

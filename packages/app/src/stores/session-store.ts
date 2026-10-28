@@ -94,6 +94,7 @@ export interface Agent {
   features?: AgentFeature[];
   thinkingOptionId?: string | null;
   requiresAttention?: boolean;
+  awaitingInput?: boolean;
   attentionReason?: "finished" | "error" | "permission" | null;
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
@@ -1875,6 +1876,7 @@ export const useSessionStore = create<SessionStore>()(
             provider: agent.provider,
             pendingPermissionCount: agent.pendingPermissions.length,
             requiresAttention: agent.requiresAttention ?? false,
+            awaitingInput: agent.awaitingInput ?? false,
             attentionReason: agent.attentionReason ?? null,
             attentionTimestamp: agent.attentionTimestamp ?? null,
             createdAt: agent.createdAt,

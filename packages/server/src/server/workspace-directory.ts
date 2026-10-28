@@ -388,6 +388,7 @@ export class WorkspaceDirectory {
             pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
             requiresAttention: agent.requiresAttention,
             attentionReason: agent.attentionReason ?? null,
+            awaitingInput: agent.awaitingInput,
           })
         : "running";
 
@@ -537,6 +538,7 @@ export class WorkspaceDirectory {
           pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
           requiresAttention: agent.requiresAttention,
           attentionReason: agent.attentionReason ?? null,
+          awaitingInput: agent.awaitingInput,
         });
         return derived === winningBucket;
       })

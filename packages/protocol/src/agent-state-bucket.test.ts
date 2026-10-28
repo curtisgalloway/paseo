@@ -90,3 +90,33 @@ describe("getAgentStatusPriority", () => {
     );
   });
 });
+
+describe("awaitingInput", () => {
+  it("shows an idle agent that asked a question as needs_input, even once read", () => {
+    expect(
+      deriveAgentStateBucket({ status: "idle", requiresAttention: false, awaitingInput: true }),
+    ).toBe("needs_input");
+    expect(
+      deriveAgentStateBucket({
+        status: "idle",
+        requiresAttention: true,
+        attentionReason: "finished",
+        awaitingInput: true,
+      }),
+    ).toBe("needs_input");
+  });
+
+  it("lets running and failed outrank a stale question", () => {
+    expect(deriveAgentStateBucket({ status: "running", awaitingInput: true })).toBe("running");
+    expect(deriveAgentStateBucket({ status: "error", awaitingInput: true })).toBe("failed");
+    expect(
+      deriveAgentStateBucket({ status: "idle", attentionReason: "error", awaitingInput: true }),
+    ).toBe("failed");
+  });
+
+  it("ranks a waiting agent with pending permissions in the agent list", () => {
+    expect(getAgentStatusPriority({ status: "idle", awaitingInput: true })).toBe(0);
+    expect(getAgentStatusPriority({ status: "running", awaitingInput: true })).toBe(2);
+    expect(getAgentStatusPriority({ status: "error", awaitingInput: true })).toBe(1);
+  });
+});

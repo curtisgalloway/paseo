@@ -70,6 +70,7 @@ const STORED_AGENT_SCHEMA = z.object({
   persistence: PERSISTENCE_HANDLE_SCHEMA,
   lastError: z.string().nullable().optional(),
   requiresAttention: z.boolean().optional(),
+  awaitingInput: z.boolean().optional(),
   attentionReason: z.enum(["finished", "error", "permission"]).nullable().optional(),
   attentionTimestamp: z.string().nullable().optional(),
   internal: z.boolean().optional(),

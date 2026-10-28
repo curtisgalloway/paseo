@@ -9,6 +9,8 @@ export interface AgentStateBucketInput {
   pendingPermissionCount?: number;
   requiresAttention?: boolean;
   attentionReason?: AgentAttentionReason;
+  /** The agent ended its turn asking the user something. Independent of read/unread. */
+  awaitingInput?: boolean;
 }
 
 const WORKSPACE_STATE_BUCKET_PRIORITY = {
@@ -25,6 +27,9 @@ export function deriveAgentStateBucket(input: AgentStateBucketInput): WorkspaceS
   }
   if (input.status === "error" || input.attentionReason === "error") {
     return "failed";
+  }
+  if (input.status !== "running" && input.awaitingInput) {
+    return "needs_input";
   }
   if (input.status === "running") {
     return "running";
@@ -45,6 +50,9 @@ export function getAgentStatusPriority(input: AgentStateBucketInput): number {
   }
   if (input.status === "error" || input.attentionReason === "error") {
     return 1;
+  }
+  if (input.status !== "running" && input.awaitingInput) {
+    return 0;
   }
   if (input.status === "running") {
     return 2;

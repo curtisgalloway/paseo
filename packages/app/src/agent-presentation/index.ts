@@ -45,12 +45,17 @@ export function useAgentDescriptor(
         pendingPermissionCount: agent?.pendingPermissions.length ?? 0,
         requiresAttention: agent?.requiresAttention ?? false,
         attentionReason: agent?.attentionReason ?? null,
+        awaitingInput: isAwaitingInput(agent),
         isTurnActive: selectAgentTurnPresentation(session, target.agentId).isActive,
       };
     }),
   );
   const icon = useProviderIcon(descriptorState.provider, context.serverId);
   return buildAgentDescriptor({ ...descriptorState, icon });
+}
+
+function isAwaitingInput(agent: Agent | null): boolean {
+  return agent?.awaitingInput === true;
 }
 
 export function buildAgentDescriptor(input: {
@@ -60,6 +65,7 @@ export function buildAgentDescriptor(input: {
   pendingPermissionCount: number;
   requiresAttention: boolean;
   attentionReason: Agent["attentionReason"];
+  awaitingInput?: boolean;
   isTurnActive: boolean;
   icon: PanelDescriptor["icon"];
 }): PanelDescriptor {
@@ -78,6 +84,7 @@ export function buildAgentDescriptor(input: {
           pendingPermissionCount: input.pendingPermissionCount,
           requiresAttention: input.requiresAttention,
           attentionReason: input.attentionReason,
+          awaitingInput: input.awaitingInput,
         })
       : null,
   };

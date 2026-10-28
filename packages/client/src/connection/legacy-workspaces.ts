@@ -111,6 +111,7 @@ export class LegacyWorkspaces {
         pendingPermissionCount: agent.pendingPermissions.length,
         requiresAttention: agent.requiresAttention,
         attentionReason: agent.attentionReason,
+        awaitingInput: agent.awaitingInput,
       });
       const existing = workspaces.get(id);
       if (

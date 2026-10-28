@@ -22,6 +22,35 @@ describe("buildAgentAttentionNotificationPayload", () => {
     });
   });
 
+  it("titles a finished turn that ended with a question as waiting for the user", () => {
+    const payload = buildAgentAttentionNotificationPayload({
+      reason: "finished",
+      serverId: "srv-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      agentTitle: "Fix the build",
+      awaitingInput: true,
+      assistantMessage: "Should I go ahead?",
+    });
+
+    expect(payload.title).toBe("Fix the build is waiting for you");
+    expect(payload.body).toBe("Should I go ahead?");
+    expect(payload.data.reason).toBe("finished");
+  });
+
+  it("falls back to a generic name when the waiting agent has no title", () => {
+    const payload = buildAgentAttentionNotificationPayload({
+      reason: "finished",
+      serverId: "srv-1",
+      workspaceId: "workspace-1",
+      agentId: "agent-1",
+      agentTitle: null,
+      awaitingInput: true,
+    });
+
+    expect(payload.title).toBe("Agent is waiting for you");
+  });
+
   it("builds finished notifications from markdown assistant text", () => {
     const payload = buildAgentAttentionNotificationPayload({
       reason: "finished",

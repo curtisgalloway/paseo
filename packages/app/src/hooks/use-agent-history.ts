@@ -104,6 +104,7 @@ export async function fetchAgentHistoryPage(input: {
       provider: agent.provider,
       pendingPermissionCount: agent.pendingPermissions.length,
       requiresAttention: agent.requiresAttention,
+      awaitingInput: agent.awaitingInput,
       attentionReason: agent.attentionReason,
       attentionTimestamp: agent.attentionTimestamp ?? null,
       archivedAt: agent.archivedAt ?? null,

@@ -92,6 +92,7 @@ import {
 } from "./provider-subagents/store.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
 import { extractAttention } from "../persistence-hooks.js";
+import { endsWithQuestionToUser } from "./awaiting-input.js";
 
 const RELOAD_SESSION_CLOSE_TIMEOUT_MS = 3_000;
 const INTERRUPT_SESSION_TIMEOUT_MS = 2_000;
@@ -280,6 +281,7 @@ export type AgentAttentionCallback = (params: {
   agentId: string;
   provider: AgentProvider;
   reason: "finished" | "error" | "permission";
+  awaitingInput?: boolean;
 }) => void;
 
 export type AgentArchivedCallback = (agentId: string) => Promise<void> | void;
@@ -369,22 +371,30 @@ export interface WaitForAgentStartOptions {
   signal?: AbortSignal;
 }
 
-export type AttentionState =
+/**
+ * `awaitingInput` rides along with attention but is independent of read/unread: viewing the
+ * agent clears `requiresAttention`, not `awaitingInput`. Any code that replaces
+ * `agent.attention` must carry it over.
+ */
+export type AttentionState = (
   | { requiresAttention: false }
   | {
       requiresAttention: true;
       attentionReason: "finished" | "error" | "permission";
       attentionTimestamp: Date;
-    };
+    }
+) & { awaitingInput?: boolean };
 
 function resolveInitialAttention(input: AttentionState | undefined): AttentionState {
+  const awaitingInput = input?.awaitingInput ? { awaitingInput: true } : {};
   if (input == null || !input.requiresAttention) {
-    return { requiresAttention: false };
+    return { requiresAttention: false, ...awaitingInput };
   }
   return {
     requiresAttention: true,
     attentionReason: input.attentionReason,
     attentionTimestamp: new Date(input.attentionTimestamp),
+    ...awaitingInput,
   };
 }
 
@@ -2225,7 +2235,10 @@ export class AgentManager {
   async clearAgentAttention(agentId: string): Promise<void> {
     const agent = this.requireAgent(agentId);
     if (agent.attention.requiresAttention) {
-      agent.attention = { requiresAttention: false };
+      agent.attention = {
+        requiresAttention: false,
+        ...(agent.attention.awaitingInput ? { awaitingInput: true } : {}),
+      };
       await this.persistSnapshot(agent);
       this.emitState(agent, { persist: false });
     }
@@ -2245,6 +2258,7 @@ export class AgentManager {
         requiresAttention: true,
         attentionReason: "finished",
         attentionTimestamp: new Date(),
+        ...(liveAgent.attention.awaitingInput ? { awaitingInput: true } : {}),
       };
       await this.persistSnapshot(liveAgent);
       this.emitState(liveAgent, { persist: false });
@@ -4982,19 +4996,38 @@ export class AgentManager {
       return;
     }
 
-    // Skip if already requires attention
-    if (agent.attention.requiresAttention) {
-      return;
+    // The user replied (running) or the turn failed (error): the question is no longer open.
+    if (
+      agent.attention.awaitingInput &&
+      (currentStatus === "running" || currentStatus === "error")
+    ) {
+      agent.attention = { ...agent.attention, awaitingInput: false };
     }
 
+    const finished = previousStatus === "running" && currentStatus === "idle";
+    const alreadyRequiresAttention = agent.attention.requiresAttention;
+
     // Check if agent transitioned from running to idle (finished)
-    if (previousStatus === "running" && currentStatus === "idle") {
+    if (finished && !alreadyRequiresAttention) {
       agent.attention = {
         requiresAttention: true,
         attentionReason: "finished",
         attentionTimestamp: new Date(),
+        ...(agent.attention.awaitingInput ? { awaitingInput: true } : {}),
       };
-      this.broadcastAgentAttention(agent, "finished");
+      this.trackBackgroundTask(this.resolveAwaitingInput(agent, { broadcast: true }));
+      return;
+    }
+
+    // An unread finish can be followed by another finished turn; the question state still
+    // needs to follow the newest message.
+    if (finished) {
+      this.trackBackgroundTask(this.resolveAwaitingInput(agent, { broadcast: false }));
+      return;
+    }
+
+    // Skip if already requires attention
+    if (alreadyRequiresAttention) {
       return;
     }
 
@@ -5007,6 +5040,39 @@ export class AgentManager {
       };
       this.broadcastAgentAttention(agent, "error");
       return;
+    }
+  }
+
+  /**
+   * Decides whether a finished turn ended with a question to the user, records it on the
+   * agent (persisted, so it survives a restart), then announces the finish. The announcement
+   * waits for the verdict so the notification can say the agent is waiting.
+   */
+  private async resolveAwaitingInput(
+    agent: ManagedAgent,
+    options: { broadcast: boolean },
+  ): Promise<void> {
+    let awaitingInput = false;
+    try {
+      // The newest assistant row is enough, and unlike getLastAssistantMessage it does not
+      // copy the whole timeline at the end of every turn.
+      const lastMessage = this.timelineStore.has(agent.id)
+        ? this.timelineStore.getLastAssistantMessage(agent.id)
+        : ((await this.durableTimelineStore?.getLastAssistantMessage(agent.id)) ?? null);
+      awaitingInput = endsWithQuestionToUser(lastMessage);
+    } catch (err) {
+      this.logger.warn({ err, agentId: agent.id }, "Failed to classify the last assistant message");
+    }
+    // The agent may have started a new turn, errored, or been replaced while we waited.
+    const stillFinished = agent.lifecycle === "idle" && this.agents.get(agent.id) === agent;
+    if (stillFinished && Boolean(agent.attention.awaitingInput) !== awaitingInput) {
+      agent.attention = { ...agent.attention, awaitingInput };
+      this.emitState(agent);
+    }
+    if (options.broadcast) {
+      this.broadcastAgentAttention(agent, "finished", {
+        awaitingInput: stillFinished && awaitingInput,
+      });
     }
   }
 
@@ -5110,6 +5176,7 @@ export class AgentManager {
   private broadcastAgentAttention(
     agent: ManagedAgent,
     reason: "finished" | "error" | "permission",
+    options?: { awaitingInput?: boolean },
   ): void {
     if (isDelegatedAgent(agent)) {
       return;
@@ -5119,6 +5186,7 @@ export class AgentManager {
       agentId: agent.id,
       provider: agent.provider,
       reason,
+      ...(options?.awaitingInput ? { awaitingInput: true } : {}),
     });
   }
 

@@ -21,6 +21,9 @@ interface BuildAgentAttentionNotificationPayloadInput {
   serverId: string;
   workspaceId: string;
   agentId: string;
+  agentTitle?: string | null;
+  /** The agent ended its turn asking the user something. */
+  awaitingInput?: boolean;
   assistantMessage?: string | null;
   permissionRequest?: NotificationPermissionRequest | null;
 }
@@ -169,7 +172,12 @@ export function findLatestPermissionRequest(
   return latest;
 }
 
-function resolveAgentAttentionTitle(reason: AgentAttentionReason): string {
+function resolveAgentAttentionTitle(input: BuildAgentAttentionNotificationPayloadInput): string {
+  const { reason } = input;
+  if (reason === "finished" && input.awaitingInput) {
+    const name = input.agentTitle?.trim();
+    return `${name || "Agent"} is waiting for you`;
+  }
   if (reason === "permission") return "Agent needs permission";
   if (reason === "error") return "Agent needs attention";
   return "Agent finished";
@@ -196,7 +204,7 @@ function resolveAgentAttentionFallbackBody(reason: AgentAttentionReason): string
 export function buildAgentAttentionNotificationPayload(
   input: BuildAgentAttentionNotificationPayloadInput,
 ): AgentAttentionNotificationPayload {
-  const title = resolveAgentAttentionTitle(input.reason);
+  const title = resolveAgentAttentionTitle(input);
   const preview = resolveAgentAttentionPreview(input);
   const body = preview ?? resolveAgentAttentionFallbackBody(input.reason);
 

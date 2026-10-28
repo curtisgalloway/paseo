@@ -100,6 +100,7 @@ export function toStoredAgentRecord(
     persistence,
     lastError: agent.lastError ?? undefined,
     requiresAttention: agent.attention.requiresAttention,
+    awaitingInput: agent.attention.awaitingInput === true,
     attentionReason: agent.attention.requiresAttention ? agent.attention.attentionReason : null,
     attentionTimestamp: agent.attention.requiresAttention
       ? agent.attention.attentionTimestamp.toISOString()
@@ -162,6 +163,7 @@ export function toAgentPayload(
 
   // Handle attention state
   payload.requiresAttention = agent.attention.requiresAttention;
+  payload.awaitingInput = agent.attention.awaitingInput === true;
   if (agent.attention.requiresAttention) {
     payload.attentionReason = agent.attention.attentionReason;
     payload.attentionTimestamp = agent.attention.attentionTimestamp.toISOString();
@@ -254,6 +256,7 @@ export function buildStoredAgentPayload(
     persistence,
     title: record.title ?? null,
     requiresAttention: record.requiresAttention ?? false,
+    awaitingInput: Boolean(record.awaitingInput),
     attentionReason: record.attentionReason ?? null,
     attentionTimestamp: record.attentionTimestamp ?? null,
     archivedAt: record.archivedAt ?? null,
@@ -280,6 +283,7 @@ export function toAgentListItemPayload(agent: AgentSnapshotPayload): AgentListIt
     lastUserMessageAt: agent.lastUserMessageAt,
     archivedAt: agent.archivedAt ?? null,
     requiresAttention: agent.requiresAttention ?? false,
+    awaitingInput: agent.awaitingInput ?? false,
     attentionReason: agent.attentionReason ?? null,
     attentionTimestamp: agent.attentionTimestamp ?? null,
     labels: agent.labels,

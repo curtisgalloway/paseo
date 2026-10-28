@@ -437,6 +437,7 @@ export type AgentStreamEvent =
       type: "attention_required";
       provider: AgentProvider;
       reason: "finished" | "error" | "permission";
+      awaitingInput?: boolean;
       timestamp: string;
     };
 

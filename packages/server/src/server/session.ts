@@ -1360,6 +1360,7 @@ export class Session {
         payload: {
           agentId: event.agentId,
           reason: serializedEvent.reason,
+          awaitingInput: serializedEvent.awaitingInput,
           timestamp: serializedEvent.timestamp,
           shouldNotify: serializedEvent.shouldNotify,
           ...(serializedEvent.notification ? { notification: serializedEvent.notification } : {}),
@@ -5590,6 +5591,7 @@ export class Session {
             pendingPermissionCount: agent.pendingPermissions?.length ?? 0,
             requiresAttention: agent.requiresAttention,
             attentionReason: agent.attentionReason ?? null,
+            awaitingInput: agent.awaitingInput,
           });
         case "created_at":
           return Date.parse(agent.createdAt);

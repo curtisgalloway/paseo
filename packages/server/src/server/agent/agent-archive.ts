@@ -18,6 +18,7 @@ export function buildArchivedAgentRecord(
     updatedAt: options?.updatedAt ?? record.updatedAt,
     lastStatus: normalizeArchivedStatus(record.lastStatus),
     requiresAttention: false,
+    awaitingInput: false,
     attentionReason: null,
     attentionTimestamp: null,
   };

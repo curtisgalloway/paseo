@@ -38,6 +38,7 @@ export function buildWorkspaceAgentActivityIndex(
       pendingPermissionCount: agent.pendingPermissions.length,
       requiresAttention: agent.requiresAttention,
       attentionReason: agent.attentionReason,
+      awaitingInput: agent.awaitingInput,
     });
     activityByWorkspaceId.set(agent.workspaceId, {
       agentId: agent.id,

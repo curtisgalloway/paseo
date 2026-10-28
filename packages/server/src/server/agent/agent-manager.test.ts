@@ -5348,6 +5348,71 @@ test("runAgent persists finished attention and idle status without an external s
   expect(persisted?.attentionTimestamp).toEqual(expect.any(String));
 });
 
+test("a turn that ends with a question marks the agent as awaiting input until the next turn", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-awaiting-input-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  let reply = "Should I go ahead?";
+  class ReplyingSession extends TestAgentSession {
+    override async startTurn(): Promise<{ turnId: string }> {
+      const turnId = `reply-turn-${randomUUID()}`;
+      setTimeout(() => {
+        this.pushEvent({ type: "turn_started", provider: this.provider, turnId });
+        this.pushEvent({
+          type: "timeline",
+          provider: this.provider,
+          turnId,
+          item: { type: "assistant_message", text: reply },
+        });
+        this.pushEvent({ type: "turn_completed", provider: this.provider, turnId });
+      }, 0);
+      return { turnId };
+    }
+  }
+  class ReplyingClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new ReplyingSession(config);
+    }
+  }
+  const attentionEvents: Array<{ reason: string; awaitingInput?: boolean }> = [];
+  const manager = new AgentManager({
+    clients: { codex: new ReplyingClient() },
+    registry: storage,
+    logger,
+    idFactory: () => "00000000-0000-4000-8000-000000000136",
+    onAgentAttention: ({ reason, awaitingInput }) => {
+      attentionEvents.push({ reason, awaitingInput });
+    },
+  });
+  const snapshot = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Awaiting input test" },
+    undefined,
+    { workspaceId: undefined },
+  );
+
+  await manager.runAgent(snapshot.id, "start");
+  await manager.flush();
+
+  expect(manager.getAgent(snapshot.id)?.attention.awaitingInput).toBe(true);
+  expect((await storage.get(snapshot.id))?.awaitingInput).toBe(true);
+  expect(attentionEvents).toEqual([{ reason: "finished", awaitingInput: true }]);
+
+  await manager.clearAgentAttention(snapshot.id);
+  await manager.flush();
+  expect(manager.getAgent(snapshot.id)?.attention).toMatchObject({
+    requiresAttention: false,
+    awaitingInput: true,
+  });
+  expect((await storage.get(snapshot.id))?.awaitingInput).toBe(true);
+
+  reply = "Done. All tests pass.";
+  await manager.runAgent(snapshot.id, "go");
+  await manager.flush();
+
+  expect(manager.getAgent(snapshot.id)?.attention.awaitingInput).toBeFalsy();
+  expect((await storage.get(snapshot.id))?.awaitingInput).toBe(false);
+  expect(attentionEvents.at(-1)).toEqual({ reason: "finished", awaitingInput: undefined });
+});
+
 test("archiveSnapshot clears persisted attention and normalizes running status", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-archive-attention-"));
   const storagePath = join(workdir, "agents");

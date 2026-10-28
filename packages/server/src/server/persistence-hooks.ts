@@ -158,13 +158,15 @@ export function extractTimestamps(record: StoredAgentRecord): {
  * is neither, so a resumed agent that drops it silently marks the chat read.
  */
 export function extractAttention(record: StoredAgentRecord): AttentionState {
+  const awaitingInput = record.awaitingInput ? { awaitingInput: true } : {};
   if (!record.requiresAttention || !record.attentionReason || !record.attentionTimestamp) {
-    return { requiresAttention: false };
+    return { requiresAttention: false, ...awaitingInput };
   }
   return {
     requiresAttention: true,
     attentionReason: record.attentionReason,
     attentionTimestamp: new Date(record.attentionTimestamp),
+    ...awaitingInput,
   };
 }
 

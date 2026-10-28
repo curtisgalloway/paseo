@@ -1,7 +1,8 @@
 import { memo, useMemo, useCallback, useState, type ReactNode } from "react";
 import { Text, View, type ViewStyle } from "react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
-import { CircleAlert, Folder, FolderGit2, Monitor } from "lucide-react-native";
+import { StyleSheet } from "react-native-unistyles";
+import { useTranslation } from "react-i18next";
+import { Folder, FolderGit2, Monitor } from "lucide-react-native";
 import { ProjectStatusIndicator } from "@/components/sidebar/project-leading-visual";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
 import {
@@ -17,7 +18,6 @@ import {
 } from "@/components/sidebar/workspace-trailing";
 import { useAppSettings } from "@/hooks/use-settings";
 import { densityIconBox } from "@/styles/density";
-import type { Theme } from "@/styles/theme";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import {
@@ -27,17 +27,12 @@ import {
 } from "@/utils/status-indicator-geometry";
 import { shouldRenderSyncedStatusLoader } from "@/utils/status-loader";
 import { StatusRing } from "@/components/status-ring";
+import { StatusGlyph, isStatusGlyphBucket } from "@/components/status-glyph";
+import { getStatusBucketLabel } from "@/hooks/sidebar-status-view-model";
 import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sidebar-workspace-title";
 import { DensityIcon } from "@/components/ui/density-icon";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
-
-const needsInputColorMapping = (theme: Theme) => ({
-  color: theme.colors.surface0,
-  fill: getStatusDotColor({ theme, bucket: "needs_input" }) ?? undefined,
-});
-
-const ThemedCircleAlert = withUnistyles(CircleAlert);
 
 export function SidebarWorkspaceRowFrame({
   workspace,
@@ -191,6 +186,7 @@ function WorkspaceStatusIndicator({
   loading?: boolean;
   reserveIdleSpace?: boolean;
 }) {
+  const { t } = useTranslation();
   // Busy is the only status that moves, and it is the ring rather than a dot for the same
   // reason it is a dot elsewhere: every status in the sidebar sits in this one slot, so busy
   // has to fill it without displacing anything. A row starting up and a row working are both
@@ -211,18 +207,17 @@ function WorkspaceStatusIndicator({
     );
   }
 
-  if (bucket === "needs_input") {
+  // Needs-input, failed and ready-for-review each replace the kind icon with a glyph of their
+  // own shape, so no two of them differ by color alone.
+  if (isStatusGlyphBucket(bucket)) {
     return (
-      <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-needs_input">
-        <ThemedCircleAlert size={STATUS_INDICATOR_ALERT_SIZE} uniProps={needsInputColorMapping} />
-      </View>
-    );
-  }
-
-  if (bucket === "attention") {
-    return (
-      <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-attention">
-        <View style={styles.standaloneStatusDot} />
+      <View
+        style={styles.workspaceStatusDot}
+        testID={`workspace-status-indicator-${bucket}`}
+        role="status"
+        accessibilityLabel={getStatusBucketLabel(bucket, t)}
+      >
+        <StatusGlyph bucket={bucket} size={STATUS_INDICATOR_ALERT_SIZE} />
       </View>
     );
   }
@@ -258,18 +253,7 @@ function StatusDotOverlay({ dotColorStyle }: { dotColorStyle: ViewStyle }) {
 }
 
 function getStatusDotColorStyle(bucket: SidebarStateBucket) {
-  switch (bucket) {
-    case "needs_input":
-      return styles.statusDotNeedsInput;
-    case "failed":
-      return styles.statusDotFailed;
-    case "running":
-      return styles.statusDotRunning;
-    case "attention":
-      return styles.statusDotAttention;
-    case "done":
-      return null;
-  }
+  return bucket === "running" ? styles.statusDotRunning : null;
 }
 
 export const sidebarWorkspaceRowStyles = StyleSheet.create((theme) => ({
@@ -499,12 +483,6 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.full,
     borderWidth: 1,
   },
-  standaloneStatusDot: {
-    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
-  },
   idleStatusDot: {
     width: STATUS_INDICATOR_FILLED_DOT_SIZE,
     height: STATUS_INDICATOR_FILLED_DOT_SIZE,
@@ -529,20 +507,8 @@ const styles = StyleSheet.create((theme) => ({
   workspaceBranchTextHovered: {
     opacity: 1,
   },
-  statusDotNeedsInput: {
-    backgroundColor: getStatusDotColor({ theme, bucket: "needs_input" }) ?? undefined,
-    borderColor: theme.colors.surface0,
-  },
-  statusDotFailed: {
-    backgroundColor: getStatusDotColor({ theme, bucket: "failed" }) ?? undefined,
-    borderColor: theme.colors.surface0,
-  },
   statusDotRunning: {
     backgroundColor: getStatusDotColor({ theme, bucket: "running" }) ?? undefined,
-    borderColor: theme.colors.surface0,
-  },
-  statusDotAttention: {
-    backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
     borderColor: theme.colors.surface0,
   },
 }));

@@ -90,6 +90,7 @@ import {
   type NotificationPlan,
 } from "./agent-attention-policy.js";
 import { AttentionCalendar } from "./attention-calendar.js";
+import { AttentionLog, attentionDelivery } from "./attention-log.js";
 import { AttentionFocus, buildFocusSummary, type HeldAttentionEntry } from "./attention-focus.js";
 import {
   buildAgentAttentionNotificationPayload,
@@ -578,6 +579,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly downloadTokenStore: DownloadTokenStore;
   private readonly paseoHome: string;
   private readonly attentionFocus: AttentionFocus;
+  private readonly attentionLog: AttentionLog;
   private readonly attentionCalendar: AttentionCalendar;
   private readonly connectedHosts: ConnectedHosts;
 
@@ -810,6 +812,10 @@ export class VoiceAssistantWebSocketServer {
     });
     this.pushNotificationSender = pushNotificationSender ?? this.pushNotifications;
 
+    this.attentionLog = new AttentionLog({
+      filePath: join(paseoHome, "attention-log.jsonl"),
+      logger: this.logger.child({ module: "attention-log" }),
+    });
     this.attentionFocus = new AttentionFocus({
       filePath: join(paseoHome, "focus.json"),
       logger: this.logger.child({ module: "attention-focus" }),
@@ -828,6 +834,9 @@ export class VoiceAssistantWebSocketServer {
     });
     this.attentionCalendar.start();
 
+    this.agentManager.setAgentAttentionResolvedCallback(({ agentId }) => {
+      this.attentionLog.recordActed(agentId);
+    });
     this.agentManager.setAgentAttentionCallback((params) => {
       void this.broadcastAgentAttention(params).catch((err) => {
         this.logger.warn({ err, agentId: params.agentId }, "Failed to broadcast agent attention");
@@ -2883,6 +2892,16 @@ export class VoiceAssistantWebSocketServer {
           nowMs,
         });
 
+    this.attentionLog.recordAttention({
+      agentId: params.agentId,
+      workspaceId: agent.workspaceId,
+      provider: params.provider,
+      reason: params.reason,
+      awaitingInput: params.awaitingInput === true,
+      tier,
+      delivery: attentionDelivery({ tier, held, plan, recipientCount: allStates.length }),
+    });
+
     this.sendAgentAttention({
       agentId: params.agentId,
       provider: params.provider,
@@ -2908,6 +2927,16 @@ export class VoiceAssistantWebSocketServer {
       const first = held[0];
       if (!first) return;
       const summary = buildFocusSummary(held);
+      this.attentionLog.recordFocusSummary({
+        agentId: first.agentId,
+        workspaceId: "unknown",
+        provider: "unknown",
+        reason: first.reason,
+        awaitingInput: first.awaitingInput,
+        tier: "caution",
+        delivery: "push",
+        heldCount: held.length,
+      });
       await this.pushNotificationSender.send({
         title: summary.title,
         body: summary.body,
@@ -2947,6 +2976,21 @@ export class VoiceAssistantWebSocketServer {
       focusTarget: null,
       pushEligible: true,
       nowMs: Date.now(),
+    });
+    this.attentionLog.recordFocusSummary({
+      agentId: target.entry.agentId,
+      workspaceId: agent.workspaceId,
+      provider: agent.provider,
+      reason: target.entry.reason,
+      awaitingInput: target.entry.awaitingInput,
+      tier: "caution",
+      delivery: attentionDelivery({
+        tier: "caution",
+        held: false,
+        plan,
+        recipientCount: notificationEntries.length,
+      }),
+      heldCount: held.length,
     });
     this.sendAgentAttention({
       agentId: target.entry.agentId,

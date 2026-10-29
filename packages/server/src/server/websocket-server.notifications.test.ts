@@ -1,7 +1,7 @@
 import { createWorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AttentionFocus } from "./attention-focus.js";
@@ -107,6 +107,7 @@ function createServer(
   const agentManager = {
     subscribe: vi.fn(() => () => {}),
     setAgentAttentionCallback: vi.fn(),
+    setAgentAttentionResolvedCallback: vi.fn(),
     getAgent: vi.fn(() => ({ workspaceId: WORKSPACE_ID, pendingPermissions: new Map() })),
     getLastAssistantMessage: vi.fn(async () => null),
     getMetricsSnapshot: vi.fn(() => ({
@@ -585,5 +586,115 @@ describe("VoiceAssistantWebSocketServer focus periods", () => {
     internals.attentionFocus.set(null);
     await Promise.resolve();
     expect(pushNotifications.sent).toEqual([]);
+  });
+});
+
+describe("VoiceAssistantWebSocketServer attention log", () => {
+  const dirs: string[] = [];
+
+  function createLoggedServer() {
+    const dir = mkdtempSync(join(tmpdir(), "paseo-attention-log-test-"));
+    dirs.push(dir);
+    const created = createServer(
+      {
+        getAgent: vi.fn(() => ({
+          config: { title: "Secret title" },
+          provider: "claude",
+          workspaceId: WORKSPACE_ID,
+          pendingPermissions: new Map(),
+        })),
+      },
+      dir,
+    );
+    const readLog = () =>
+      readFileSync(join(dir, "attention-log.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+    return {
+      ...created,
+      internals: asInternals<WebSocketServerInternals>(created.server),
+      readLog,
+    };
+  }
+
+  const presentAway = {
+    deviceType: "web" as const,
+    appVisible: false,
+    focusedAgentId: "other",
+    lastActivityAt: new Date(),
+  };
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("logs none for advisory", async () => {
+    const { server, internals, readLog } = createLoggedServer();
+    connectClient(server, presentAway);
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "finished",
+    });
+    expect(readLog()).toEqual([
+      expect.objectContaining({
+        kind: "attention",
+        schemaVersion: 1,
+        agentId: "agent-1",
+        workspaceId: WORKSPACE_ID,
+        provider: "claude",
+        reason: "finished",
+        awaitingInput: false,
+        tier: "advisory",
+        delivery: "none",
+      }),
+    ]);
+    expect(JSON.stringify(readLog())).not.toContain("Secret title");
+  });
+
+  it("logs in_app for caution with a present client", async () => {
+    const { server, internals, readLog } = createLoggedServer();
+    connectClient(server, presentAway);
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "error",
+    });
+    expect(readLog()[0]).toMatchObject({ tier: "caution", delivery: "in_app" });
+  });
+
+  it("logs push for caution with nobody present", async () => {
+    const { internals, readLog } = createLoggedServer();
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "error",
+    });
+    expect(readLog()[0]).toMatchObject({ tier: "caution", delivery: "push" });
+  });
+
+  it("logs held during focus", async () => {
+    const { server, internals, readLog } = createLoggedServer();
+    connectClient(server, presentAway);
+    internals.attentionFocus.set(25 * 60_000);
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "error",
+    });
+    expect(readLog()[0]).toMatchObject({ tier: "caution", delivery: "held" });
+  });
+
+  it("logs suppressed_focused when the user is already looking at the agent", async () => {
+    const { server, internals, readLog } = createLoggedServer();
+    connectClient(server, { ...presentAway, appVisible: true, focusedAgentId: "agent-1" });
+    await internals.broadcastAgentAttention({
+      agentId: "agent-1",
+      provider: "claude",
+      reason: "error",
+    });
+    expect(readLog()[0]).toMatchObject({ tier: "caution", delivery: "suppressed_focused" });
   });
 });

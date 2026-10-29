@@ -284,6 +284,12 @@ export type AgentAttentionCallback = (params: {
   awaitingInput?: boolean;
 }) => void;
 
+// The user acted on an agent's attention: opened it (cleared) or replied to its question.
+export type AgentAttentionResolvedCallback = (params: {
+  agentId: string;
+  how: "cleared" | "replied";
+}) => void;
+
 export type AgentArchivedCallback = (agentId: string) => Promise<void> | void;
 
 export interface ProviderAvailability {
@@ -780,6 +786,7 @@ export class AgentManager {
   ) => ProviderPaseoToolsPolicy | undefined;
   private appendSystemPrompt: string;
   private onAgentAttention?: AgentAttentionCallback;
+  private onAgentAttentionResolved?: AgentAttentionResolvedCallback;
   private onAgentArchived?: AgentArchivedCallback;
   private onWorkspaceStateMayHaveChanged?: (params: { cwd: string }) => void;
   private logger: Logger;
@@ -871,6 +878,10 @@ export class AgentManager {
 
   setAgentAttentionCallback(callback: AgentAttentionCallback): void {
     this.onAgentAttention = callback;
+  }
+
+  setAgentAttentionResolvedCallback(callback: AgentAttentionResolvedCallback): void {
+    this.onAgentAttentionResolved = callback;
   }
 
   setAgentArchivedCallback(callback: AgentArchivedCallback): void {
@@ -2241,6 +2252,7 @@ export class AgentManager {
       };
       await this.persistSnapshot(agent);
       this.emitState(agent, { persist: false });
+      this.onAgentAttentionResolved?.({ agentId, how: "cleared" });
     }
   }
 
@@ -5002,6 +5014,9 @@ export class AgentManager {
       (currentStatus === "running" || currentStatus === "error")
     ) {
       agent.attention = { ...agent.attention, awaitingInput: false };
+      if (currentStatus === "running") {
+        this.onAgentAttentionResolved?.({ agentId: agent.id, how: "replied" });
+      }
     }
 
     const finished = previousStatus === "running" && currentStatus === "idle";

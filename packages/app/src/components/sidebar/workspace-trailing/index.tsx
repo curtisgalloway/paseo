@@ -4,7 +4,9 @@ import { DiffStat } from "@/components/diff-stat";
 import type { SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
 import { useAppSettings } from "@/hooks/use-settings";
 import type { SidebarWorkspaceTrailing } from "@/hooks/use-settings";
-import { useCompactTimeAgo } from "@/hooks/use-time-ago";
+import { useTranslation } from "react-i18next";
+import { useCompactTimeAgo, useWaitingDuration } from "@/hooks/use-time-ago";
+import { resolveRowTimeLabelKind } from "@/hooks/sidebar-status-view-model";
 
 export type { SidebarWorkspaceTrailing };
 
@@ -49,6 +51,13 @@ export function SidebarWorkspaceTrailingContent({
     );
   }
   if (trailing === "timestamp" && workspace.statusEnteredAt) {
+    const bucket = workspace.statusBucket;
+    if (
+      (bucket === "needs_input" || bucket === "failed") &&
+      resolveRowTimeLabelKind(workspace) === "waiting"
+    ) {
+      return <WorkspaceWaitingLabel enteredAt={workspace.statusEnteredAt} bucket={bucket} />;
+    }
     return <WorkspaceTimestamp enteredAt={workspace.statusEnteredAt} />;
   }
   return null;
@@ -68,7 +77,36 @@ function WorkspaceTimestamp({ enteredAt }: { enteredAt: Date }) {
   );
 }
 
+/**
+ * "waiting 3h", in the same color as the row's status dot. Its own component for the same
+ * reason as `WorkspaceTimestamp`: the clock's state stops at one `<Text>`.
+ */
+function WorkspaceWaitingLabel({
+  enteredAt,
+  bucket,
+}: {
+  enteredAt: Date;
+  bucket: "needs_input" | "failed";
+}) {
+  const { t } = useTranslation();
+  const duration = useWaitingDuration(enteredAt);
+  return (
+    <Text
+      style={[
+        styles.timestamp,
+        bucket === "failed" ? styles.waitingFailed : styles.waitingNeedsInput,
+      ]}
+      numberOfLines={1}
+      testID="sidebar-workspace-waiting"
+    >
+      {t("sidebar.waiting", { duration })}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
+  waitingNeedsInput: { color: theme.colors.statusDotWarning },
+  waitingFailed: { color: theme.colors.statusDotDanger },
   // A step below the project title it shares the row with. The timestamp is the one thing here
   // you never came looking for, so it sits at the bottom of the muted ramp rather than tying
   // with the label naming the group.

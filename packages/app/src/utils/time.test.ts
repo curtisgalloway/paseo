@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   describeCompactTimeAgo,
   describeTimeAgo,
+  describeWaitingDuration,
   formatCompactTimeAgo,
   formatCompactTimeAgoAsProse,
   formatDuration,
@@ -151,5 +152,31 @@ describe("formatMessageTimestamp", () => {
     const formatted = formatMessageTimestamp(date, now);
     expect(formatted).toMatch(/Apr|April/);
     expect(formatted).toMatch(/2026/);
+  });
+});
+
+describe("describeWaitingDuration", () => {
+  const now = new Date("2026-10-28T12:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms);
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+
+  it("floors each unit and never shows a date", () => {
+    expect(describeWaitingDuration(ago(0), now).label).toBe("<1m");
+    expect(describeWaitingDuration(ago(59_999), now).label).toBe("<1m");
+    expect(describeWaitingDuration(ago(MIN), now).label).toBe("1m");
+    expect(describeWaitingDuration(ago(59 * MIN + 59_000), now).label).toBe("59m");
+    expect(describeWaitingDuration(ago(HOUR), now).label).toBe("1h");
+    expect(describeWaitingDuration(ago(23 * HOUR + 59 * MIN), now).label).toBe("23h");
+    expect(describeWaitingDuration(ago(DAY), now).label).toBe("1d");
+    expect(describeWaitingDuration(ago(12 * DAY), now).label).toBe("12d");
+  });
+
+  it("clamps a future instant to <1m and reports the tick tier", () => {
+    expect(describeWaitingDuration(ago(-5 * MIN), now).label).toBe("<1m");
+    expect(describeWaitingDuration(ago(5 * MIN), now).resolution).toBe("minute");
+    expect(describeWaitingDuration(ago(3 * HOUR), now).resolution).toBe("hour");
+    expect(describeWaitingDuration(ago(30 * DAY), now).resolution).toBe("day");
   });
 });

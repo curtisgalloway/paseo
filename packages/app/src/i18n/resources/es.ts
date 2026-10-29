@@ -1191,6 +1191,8 @@ export const es: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "Grupo {{label}}",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "Necesita datos",
       failed: "Con error",

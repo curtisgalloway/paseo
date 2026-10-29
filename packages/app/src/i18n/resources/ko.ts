@@ -1162,6 +1162,8 @@ export const ko: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "{{label}} 그룹",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "입력 필요",
       failed: "실패",

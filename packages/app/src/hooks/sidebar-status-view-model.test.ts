@@ -5,6 +5,9 @@ import {
   buildStatusGroups,
   buildStatusShortcutIndex,
   getStatusBucketLabel,
+  isStatusViewAllClear,
+  isWaitingOnUserBucket,
+  resolveRowTimeLabelKind,
   STATUS_BUCKET_ORDER,
   type StatusGroup,
 } from "./sidebar-status-view-model";
@@ -246,5 +249,47 @@ describe("getStatusBucketLabel", () => {
     } finally {
       await i18n.changeLanguage("en");
     }
+  });
+});
+
+describe("waiting on you", () => {
+  it("treats needs_input and failed as waiting buckets", () => {
+    expect(isWaitingOnUserBucket("needs_input")).toBe(true);
+    expect(isWaitingOnUserBucket("failed")).toBe(true);
+    for (const bucket of ["running", "attention", "done"] as const) {
+      expect(isWaitingOnUserBucket(bucket)).toBe(false);
+    }
+  });
+
+  it("is all clear only when no group or pinned row needs the user", () => {
+    expect(isStatusViewAllClear({ groupBuckets: [], pinnedBuckets: [] })).toBe(true);
+    expect(
+      isStatusViewAllClear({
+        groupBuckets: ["running", "attention", "done"],
+        pinnedBuckets: ["done"],
+      }),
+    ).toBe(true);
+    expect(isStatusViewAllClear({ groupBuckets: ["needs_input"], pinnedBuckets: [] })).toBe(false);
+    expect(isStatusViewAllClear({ groupBuckets: ["failed"], pinnedBuckets: [] })).toBe(false);
+    expect(isStatusViewAllClear({ groupBuckets: ["done"], pinnedBuckets: ["failed"] })).toBe(false);
+  });
+
+  it("labels waiting rows only when they have an entry time", () => {
+    const at = new Date("2026-10-28T10:00:00Z");
+    expect(resolveRowTimeLabelKind({ statusBucket: "needs_input", statusEnteredAt: at })).toBe(
+      "waiting",
+    );
+    expect(resolveRowTimeLabelKind({ statusBucket: "failed", statusEnteredAt: at })).toBe(
+      "waiting",
+    );
+    expect(resolveRowTimeLabelKind({ statusBucket: "failed", statusEnteredAt: null })).toBe(
+      "activity",
+    );
+    expect(resolveRowTimeLabelKind({ statusBucket: "running", statusEnteredAt: at })).toBe(
+      "activity",
+    );
+    expect(resolveRowTimeLabelKind({ statusBucket: "attention", statusEnteredAt: at })).toBe(
+      "activity",
+    );
   });
 });

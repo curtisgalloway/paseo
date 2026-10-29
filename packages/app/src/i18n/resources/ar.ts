@@ -1155,6 +1155,8 @@ export const ar: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "مجموعة {{label}}",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "تحتاج إدخالاً",
       failed: "فشل",

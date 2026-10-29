@@ -1172,6 +1172,8 @@ export const ru: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "Группа «{{label}}»",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "Ожидает ввода",
       failed: "Ошибка",

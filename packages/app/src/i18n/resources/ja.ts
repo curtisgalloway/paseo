@@ -1168,6 +1168,8 @@ export const ja: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "{{label}} グループ",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "入力待ち",
       failed: "失敗",

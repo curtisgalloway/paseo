@@ -93,3 +93,35 @@ export function buildStatusShortcutIndex(groups: StatusGroup[]): Map<string, num
   }
   return index;
 }
+
+/** Buckets whose rows are waiting on the user. */
+export function isWaitingOnUserBucket(bucket: StatusBucket): boolean {
+  return bucket === "needs_input" || bucket === "failed";
+}
+
+/**
+ * The status view's endpoint: nothing, pinned rows included, needs the user. Pinned rows sit
+ * outside the groups, so the groups alone would call a pinned failure "all clear".
+ */
+export function isStatusViewAllClear(input: {
+  groupBuckets: readonly StatusBucket[];
+  pinnedBuckets: readonly StatusBucket[];
+}): boolean {
+  return (
+    !input.groupBuckets.some(isWaitingOnUserBucket) &&
+    !input.pinnedBuckets.some(isWaitingOnUserBucket)
+  );
+}
+
+/**
+ * Which trailing label a row gets. Waiting rows count from when they entered the state; a
+ * row with no entry time (old daemon, empty workspace) keeps the activity label.
+ */
+export function resolveRowTimeLabelKind(input: {
+  statusBucket: StatusBucket;
+  statusEnteredAt: Date | null;
+}): "waiting" | "activity" {
+  return isWaitingOnUserBucket(input.statusBucket) && input.statusEnteredAt !== null
+    ? "waiting"
+    : "activity";
+}

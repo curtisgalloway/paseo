@@ -89,6 +89,7 @@ import {
   type ClientPresenceState,
   type NotificationPlan,
 } from "./agent-attention-policy.js";
+import { AttentionCalendar } from "./attention-calendar.js";
 import { AttentionFocus, buildFocusSummary, type HeldAttentionEntry } from "./attention-focus.js";
 import {
   buildAgentAttentionNotificationPayload,
@@ -577,6 +578,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly downloadTokenStore: DownloadTokenStore;
   private readonly paseoHome: string;
   private readonly attentionFocus: AttentionFocus;
+  private readonly attentionCalendar: AttentionCalendar;
   private readonly connectedHosts: ConnectedHosts;
 
   toolHosts() {
@@ -819,6 +821,12 @@ export class VoiceAssistantWebSocketServer {
       },
     });
     this.attentionFocus.start();
+    this.attentionCalendar = new AttentionCalendar({
+      configPath: join(paseoHome, "attention-calendar.json"),
+      logger: this.logger.child({ module: "attention-calendar" }),
+      focus: this.attentionFocus,
+    });
+    this.attentionCalendar.start();
 
     this.agentManager.setAgentAttentionCallback((params) => {
       void this.broadcastAgentAttention(params).catch((err) => {
@@ -1154,6 +1162,7 @@ export class VoiceAssistantWebSocketServer {
     this.prepareForShutdown();
     await this.agentMessages.close();
     await this.connectedHosts.close();
+    this.attentionCalendar.dispose();
     this.attentionFocus.dispose();
     this.unsubscribeSpeechReadiness?.();
     this.unsubscribeSpeechReadiness = null;

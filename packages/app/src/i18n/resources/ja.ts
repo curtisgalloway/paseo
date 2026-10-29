@@ -1251,6 +1251,7 @@ export const ja: TranslationResources = {
       label: "集中モード",
       minutesLeft: "残り{{minutes}}分",
       lessThanMinuteLeft: "残り1分未満",
+      meeting: "meeting",
       held: "{{count}}件保留中",
       end: "集中モードを終了",
       duration25: "25分",

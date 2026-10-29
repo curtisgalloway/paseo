@@ -1237,6 +1237,7 @@ export const ar: TranslationResources = {
       label: "التركيز",
       minutesLeft: "متبقي {{minutes}} دقيقة",
       lessThanMinuteLeft: "متبقي أقل من دقيقة",
+      meeting: "meeting",
       held: "{{count}} معلّقة",
       end: "إنهاء التركيز",
       duration25: "25 دقيقة",

@@ -102,7 +102,10 @@ function FocusRow({ serverId }: { serverId: string }) {
   const heldText = heldCount > 0 ? t("sidebar.focus.held", { count: heldCount }) : null;
 
   const label = t("sidebar.focus.label");
-  const visibleText = active ? [label, remainingText, heldText].filter(Boolean).join(" · ") : label;
+  const meetingText = focus?.source === "calendar" ? t("sidebar.focus.meeting") : null;
+  const visibleText = active
+    ? [label, meetingText, remainingText, heldText].filter(Boolean).join(" · ")
+    : label;
   const accessibilityLabel = active
     ? t("sidebar.focus.accessibilityActive", { details: visibleText })
     : t("sidebar.focus.accessibilityInactive");

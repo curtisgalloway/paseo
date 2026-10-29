@@ -211,3 +211,109 @@ describe("buildFocusSummary", () => {
     expect(buildFocusSummary([entry("a", null)]).body).toBe("Untitled agent");
   });
 });
+
+describe("AttentionFocus calendar", () => {
+  let dir: string;
+  let filePath: string;
+  const onChange = vi.fn();
+  const logger = { warn: vi.fn() } as unknown as pino.Logger;
+  const block = (minutes: number, eventKey = "uid|start") => ({
+    startedAt: new Date(Date.now() - 5 * MINUTE),
+    until: new Date(Date.now() + minutes * MINUTE),
+    eventKey,
+  });
+
+  function create() {
+    const focus = new AttentionFocus({ filePath, logger, onChange, onEnded: vi.fn() });
+    focus.start();
+    return focus;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-27T12:00:00.000Z"));
+    dir = mkdtempSync(join(tmpdir(), "paseo-focus-cal-"));
+    filePath = join(dir, "focus.json");
+    onChange.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("starts a calendar period from the block", () => {
+    const focus = create();
+    focus.applyCalendar(block(30));
+    expect(focus.getState()).toMatchObject({
+      active: true,
+      source: "calendar",
+      startedAt: "2026-10-27T11:55:00.000Z",
+      until: "2026-10-27T12:30:00.000Z",
+    });
+    vi.advanceTimersByTime(31 * MINUTE);
+    expect(focus.getState().active).toBe(false);
+    focus.dispose();
+  });
+
+  it("extends a shorter manual period and leaves a longer one alone", () => {
+    const focus = create();
+    focus.set(10 * MINUTE);
+    focus.applyCalendar(block(30));
+    expect(focus.getState()).toMatchObject({ source: "calendar" });
+    expect(focus.getState().until).toBe("2026-10-27T12:30:00.000Z");
+
+    focus.set(60 * MINUTE);
+    focus.applyCalendar(block(30));
+    expect(focus.getState()).toMatchObject({
+      source: "manual",
+      until: "2026-10-27T13:00:00.000Z",
+    });
+    focus.dispose();
+  });
+
+  it("follows a change to the end of a calendar-owned block", () => {
+    const focus = create();
+    focus.applyCalendar(block(30));
+    focus.applyCalendar(block(45));
+    expect(focus.getState().until).toBe("2026-10-27T12:45:00.000Z");
+    focus.dispose();
+  });
+
+  it("does not restart a block the user ended, and remembers it across restarts", () => {
+    const focus = create();
+    focus.applyCalendar(block(30, "uid|first"));
+    focus.set(null);
+    focus.applyCalendar(block(30, "uid|first"));
+    expect(focus.getState().active).toBe(false);
+    focus.dispose();
+
+    expect(JSON.parse(readFileSync(filePath, "utf8")).dismissedCalendarKeys).toEqual(["uid|first"]);
+    const restarted = create();
+    restarted.applyCalendar(block(30, "uid|first"));
+    expect(restarted.getState().active).toBe(false);
+    restarted.applyCalendar(block(30, "uid|second"));
+    expect(restarted.getState().active).toBe(true);
+    restarted.dispose();
+  });
+
+  it("does not dismiss anything when the period ends by itself", () => {
+    const focus = create();
+    focus.applyCalendar(block(30));
+    vi.advanceTimersByTime(31 * MINUTE);
+    expect(JSON.parse(readFileSync(filePath, "utf8")).dismissedCalendarKeys).toEqual([]);
+    focus.dispose();
+  });
+
+  it("keeps at most 50 dismissed keys", () => {
+    const focus = create();
+    for (let i = 0; i < 55; i += 1) {
+      focus.applyCalendar(block(30, `uid|${i}`));
+      focus.set(null);
+    }
+    const keys = JSON.parse(readFileSync(filePath, "utf8")).dismissedCalendarKeys as string[];
+    expect(keys).toHaveLength(50);
+    expect(keys[49]).toBe("uid|54");
+    focus.dispose();
+  });
+});

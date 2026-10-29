@@ -1263,6 +1263,7 @@ export const ptBR: TranslationResources = {
       label: "Foco",
       minutesLeft: "{{minutes}} min restantes",
       lessThanMinuteLeft: "<1 min restante",
+      meeting: "meeting",
       held: "{{count}} retidas",
       end: "Encerrar foco",
       duration25: "25 minutos",

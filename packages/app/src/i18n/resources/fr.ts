@@ -1267,6 +1267,7 @@ export const fr: TranslationResources = {
       label: "Concentration",
       minutesLeft: "{{minutes}} min restantes",
       lessThanMinuteLeft: "<1 min restante",
+      meeting: "meeting",
       held: "{{count}} en attente",
       end: "Terminer la concentration",
       duration25: "25 minutes",

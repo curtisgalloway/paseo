@@ -1229,6 +1229,7 @@ export const zhCN: TranslationResources = {
       label: "专注",
       minutesLeft: "剩余 {{minutes}} 分钟",
       lessThanMinuteLeft: "剩余不足 1 分钟",
+      meeting: "meeting",
       held: "{{count}} 条已暂存",
       end: "结束专注",
       duration25: "25 分钟",

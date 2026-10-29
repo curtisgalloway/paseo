@@ -6,6 +6,7 @@ import type { AttentionFocusState } from "@getpaseo/protocol/messages";
 
 export const MAX_ATTENTION_FOCUS_MS = 8 * 60 * 60 * 1000;
 const SUMMARY_TITLE_LIMIT = 5;
+const MAX_DISMISSED_CALENDAR_KEYS = 50;
 
 export interface HeldAttentionEntry {
   agentId: string;
@@ -20,6 +21,7 @@ interface PersistedFocus {
   startedAt?: string | null;
   source: string | null;
   held: HeldAttentionEntry[];
+  dismissedCalendarKeys?: string[];
 }
 
 interface AttentionFocusOptions {
@@ -41,6 +43,9 @@ export class AttentionFocus {
   private startedAt: number | null = null;
   private source: string | null = null;
   private held: HeldAttentionEntry[] = [];
+  private dismissed: string[] = [];
+  // The calendar block most recently reported, so an explicit end can dismiss it.
+  private calendarBlock: { key: string; until: number } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly now: () => number;
 
@@ -51,6 +56,7 @@ export class AttentionFocus {
   // Loads the persisted state; an expired period ends immediately and releases its summary.
   start(): void {
     const persisted = this.read();
+    this.dismissed = persisted?.dismissedCalendarKeys ?? [];
     if (persisted?.until) {
       const until = Date.parse(persisted.until);
       if (Number.isFinite(until)) {
@@ -93,6 +99,9 @@ export class AttentionFocus {
   // A positive duration starts or replaces the period; null ends it now.
   set(durationMs: number | null): AttentionFocusState {
     if (durationMs === null) {
+      if (this.calendarBlock && this.calendarBlock.until > this.now()) {
+        this.dismiss(this.calendarBlock.key);
+      }
       this.end();
       return this.getState();
     }
@@ -111,11 +120,46 @@ export class AttentionFocus {
     return this.getState();
   }
 
+  // Reports the calendar's current block. Starts focus, extends a shorter manual period, or
+  // follows the block's end when the calendar already owns the period. A block the user ended
+  // explicitly is ignored.
+  applyCalendar(block: { until: Date; startedAt: Date; eventKey: string }): void {
+    const until = block.until.getTime();
+    if (!Number.isFinite(until) || until <= this.now()) {
+      return;
+    }
+    this.calendarBlock = { key: block.eventKey, until };
+    if (this.dismissed.includes(block.eventKey)) {
+      return;
+    }
+    if (!this.isActive()) {
+      this.held = [];
+      this.startedAt = block.startedAt.getTime();
+    } else if (this.source === "manual") {
+      if (until <= (this.until ?? 0)) {
+        return;
+      }
+    } else if (this.until === until) {
+      return;
+    }
+    this.until = until;
+    this.source = "calendar";
+    this.persist();
+    this.arm();
+    this.options.onChange(this.getState());
+  }
+
   // Records a held Caution event. Latest entry per agent wins.
   hold(entry: HeldAttentionEntry): void {
     this.held = [...this.held.filter((held) => held.agentId !== entry.agentId), entry];
     this.persist();
     this.options.onChange(this.getState());
+  }
+
+  private dismiss(key: string): void {
+    this.dismissed = [...this.dismissed.filter((existing) => existing !== key), key].slice(
+      -MAX_DISMISSED_CALENDAR_KEYS,
+    );
   }
 
   private end(): void {
@@ -162,6 +206,9 @@ export class AttentionFocus {
         startedAt: typeof raw.startedAt === "string" ? raw.startedAt : null,
         source: typeof raw.source === "string" ? raw.source : null,
         held: Array.isArray(raw.held) ? raw.held : [],
+        dismissedCalendarKeys: Array.isArray(raw.dismissedCalendarKeys)
+          ? raw.dismissedCalendarKeys.filter((key): key is string => typeof key === "string")
+          : [],
       };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -177,6 +224,7 @@ export class AttentionFocus {
       startedAt: this.startedAt === null ? null : new Date(this.startedAt).toISOString(),
       source: this.source,
       held: this.held,
+      dismissedCalendarKeys: this.dismissed,
     };
     try {
       mkdirSync(dirname(this.options.filePath), { recursive: true });

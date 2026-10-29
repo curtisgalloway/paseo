@@ -1255,6 +1255,7 @@ export const ru: TranslationResources = {
       label: "Фокус",
       minutesLeft: "осталось {{minutes}} мин",
       lessThanMinuteLeft: "осталось <1 мин",
+      meeting: "meeting",
       held: "отложено: {{count}}",
       end: "Завершить фокус",
       duration25: "25 минут",

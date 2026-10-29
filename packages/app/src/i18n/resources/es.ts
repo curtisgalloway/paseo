@@ -1273,6 +1273,7 @@ export const es: TranslationResources = {
       label: "Concentración",
       minutesLeft: "{{minutes}} min restantes",
       lessThanMinuteLeft: "<1 min restante",
+      meeting: "meeting",
       held: "{{count}} retenidas",
       end: "Terminar concentración",
       duration25: "25 minutos",

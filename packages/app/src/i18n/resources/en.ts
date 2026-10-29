@@ -1245,6 +1245,7 @@ export const en = {
       label: "Focus",
       minutesLeft: "{{minutes}} min left",
       lessThanMinuteLeft: "<1 min left",
+      meeting: "meeting",
       held: "{{count}} held",
       end: "End focus",
       duration25: "25 minutes",

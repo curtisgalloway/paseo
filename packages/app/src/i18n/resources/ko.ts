@@ -1244,6 +1244,7 @@ export const ko: TranslationResources = {
       label: "집중",
       minutesLeft: "{{minutes}}분 남음",
       lessThanMinuteLeft: "1분 미만 남음",
+      meeting: "meeting",
       held: "{{count}}건 보류",
       end: "집중 종료",
       duration25: "25분",

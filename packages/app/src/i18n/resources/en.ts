@@ -1163,6 +1163,8 @@ export const en = {
   },
   sidebar: {
     statusGroupAccessibility: "{{label}} group",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "Needs input",
       failed: "Failed",

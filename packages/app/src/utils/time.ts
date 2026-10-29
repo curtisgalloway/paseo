@@ -83,6 +83,23 @@ export function describeCompactTimeAgo(date: Date, now: Date = new Date()): Rela
   return { label: age.value, resolution: age.resolution };
 }
 
+/**
+ * How long something has been waiting on you: "<1m", "5m", "3h", "12d". Floors each unit and
+ * never switches to a date, because a week-old request is still a request and "Oct 21" hides
+ * how long it has sat. The resolution is the same tick tier the compact label uses.
+ */
+export function describeWaitingDuration(date: Date, now: Date = new Date()): RelativeTimeLabel {
+  const elapsedMs = Math.max(0, now.getTime() - date.getTime());
+  if (elapsedMs < MINUTE_MS) return { label: "<1m", resolution: "minute" };
+  if (elapsedMs < HOUR_MS) {
+    return { label: `${Math.floor(elapsedMs / MINUTE_MS)}m`, resolution: "minute" };
+  }
+  if (elapsedMs < DAY_MS) {
+    return { label: `${Math.floor(elapsedMs / HOUR_MS)}h`, resolution: "hour" };
+  }
+  return { label: `${Math.floor(elapsedMs / DAY_MS)}d`, resolution: "day" };
+}
+
 export function formatCompactTimeAgo(date: Date, now: Date = new Date()): string {
   return describeCompactTimeAgo(date, now).label;
 }

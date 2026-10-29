@@ -1181,6 +1181,8 @@ export const ptBR: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "Grupo {{label}}",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "Precisa de resposta",
       failed: "Com falha",

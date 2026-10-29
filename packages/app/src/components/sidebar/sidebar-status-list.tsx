@@ -21,7 +21,7 @@ import type { GestureType } from "react-native-gesture-handler";
 import { navigateToWorkspace } from "@/stores/navigation-active-workspace-store";
 import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
 import { type SidebarWorkspaceEntry } from "@/hooks/use-sidebar-workspaces-list";
-import type { StatusBucket } from "@/hooks/sidebar-status-view-model";
+import { isStatusViewAllClear, type StatusBucket } from "@/hooks/sidebar-status-view-model";
 import type { SidebarWorkspaceGroup } from "@/components/sidebar/sidebar-labels";
 import { SidebarFilterEmptyState } from "@/components/sidebar/empty-states";
 import type { HostBadgeModel } from "@/hosts/appearance";
@@ -199,6 +199,14 @@ export function SidebarStatusWorkspaceList({
       supportsPinningByServerId,
     ],
   );
+  const allClear = useMemo(
+    () =>
+      isStatusViewAllClear({
+        groupBuckets: groups.map((group) => group.leading.bucket),
+        pinnedBuckets: pinnedWorkspaces.map((workspace) => workspace.statusBucket),
+      }),
+    [groups, pinnedWorkspaces],
+  );
   const content = (
     <>
       {pinnedWorkspaces.length > 0 ? (
@@ -238,17 +246,20 @@ export function SidebarStatusWorkspaceList({
       {sidebarFilterEmpty ? (
         <SidebarFilterEmptyState />
       ) : (
-        <StatusGroupList
-          groups={groups}
-          collapsedWorkspaceGroupKeys={collapsedWorkspaceGroupKeys}
-          projectIconByProjectViewKey={projectIconByProjectViewKey}
-          shortcutIndex={statusShortcutIndex}
-          showShortcutBadges={showShortcutBadges}
-          onWorkspacePress={onWorkspacePress}
-          hostBadgeByServerId={hostBadgeByServerId}
-          supportsPinningByServerId={supportsPinningByServerId}
-          onToggleWorkspacePin={onToggleWorkspacePin}
-        />
+        <>
+          {allClear ? <StatusAllClear /> : null}
+          <StatusGroupList
+            groups={groups}
+            collapsedWorkspaceGroupKeys={collapsedWorkspaceGroupKeys}
+            projectIconByProjectViewKey={projectIconByProjectViewKey}
+            shortcutIndex={statusShortcutIndex}
+            showShortcutBadges={showShortcutBadges}
+            onWorkspacePress={onWorkspacePress}
+            hostBadgeByServerId={hostBadgeByServerId}
+            supportsPinningByServerId={supportsPinningByServerId}
+            onToggleWorkspacePin={onToggleWorkspacePin}
+          />
+        </>
       )}
     </>
   );
@@ -274,6 +285,19 @@ export function SidebarStatusWorkspaceList({
           {content}
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+/** The status view's endpoint: a quiet line, not a group, so nothing below it moves. */
+function StatusAllClear() {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.allClearRow} testID="sidebar-status-all-clear">
+      <ThemedCircleCheck uniProps={mutedGroupIconProps} />
+      <Text style={styles.allClearText} numberOfLines={1}>
+        {t("sidebar.allClear")}
+      </Text>
     </View>
   );
 }
@@ -1066,6 +1090,21 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing[3],
   },
   statusWorkspaceListContainer: {},
+  allClearRow: {
+    minHeight: density.rowHeight,
+    paddingHorizontal: theme.spacing[2],
+    marginBottom: theme.spacing[2],
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  allClearText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.base,
+    fontWeight: "400",
+    minWidth: 0,
+    flexShrink: 1,
+  },
   statusGroupRow: {
     minHeight: density.rowHeight,
     paddingVertical: theme.spacing[2],

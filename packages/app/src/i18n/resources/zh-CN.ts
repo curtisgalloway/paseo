@@ -1147,6 +1147,8 @@ export const zhCN: TranslationResources = {
   },
   sidebar: {
     statusGroupAccessibility: "{{label}} 分组",
+    waiting: "waiting {{duration}}",
+    allClear: "All clear — nothing needs you",
     statusBucket: {
       needsInput: "需要输入",
       failed: "失败",

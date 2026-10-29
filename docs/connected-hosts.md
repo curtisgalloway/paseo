@@ -102,3 +102,13 @@ subscription demand is rebuilt by its owning client on reconnect.
 See the [SDK reference](../public-docs/sdk/reference.md#clienthosts),
 [CLI reference](../public-docs/cli.md#connected-hosts), and
 [plugin reference](../public-docs/plugins/reference.md#connected-hosts).
+
+## Focus periods
+
+A hub's attention focus period is relayed to every connected host that advertises
+`features.attentionFocus`, so the host holds its own Caution notifications too. Start, replace,
+calendar start or extension, and the end (manual or expiry) are sent as
+`attention.focus.set.request` with `forwarded: true` (duration until the period's end, or null).
+When a host link is accepted, including every reconnect, the current period is sent if one is active.
+Delivery is fire-and-forget with a warning log. A daemon that receives a `forwarded` request applies
+it without relaying it onward, so focus cannot loop between daemons.

@@ -1,6 +1,10 @@
 import { createWorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import { SessionDelivery } from "./session/owned-subscriptions/index.js";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AttentionFocus } from "./attention-focus.js";
 import type { Server as HTTPServer } from "http";
 import type pino from "pino";
 import type { AgentManager } from "./agent/agent-manager.js";
@@ -115,10 +119,15 @@ function createWorkspaceRegistry(records: PersistedWorkspaceRecord[]): Workspace
   });
 }
 
-function createServer(terminalManager: TerminalManager, workspaceRegistry?: WorkspaceRegistry) {
+function createServer(
+  terminalManager: TerminalManager,
+  workspaceRegistry?: WorkspaceRegistry,
+  home = "/tmp/paseo-test",
+) {
   const pushNotifications = new RecordingPushNotificationSender();
   const agentManager = {
     setAgentAttentionCallback: vi.fn(),
+    setAgentAttentionResolvedCallback: vi.fn(),
     subscribe: vi.fn(() => () => {}),
     getAgent: vi.fn(() => null),
     getLastAssistantMessage: vi.fn(async () => null),
@@ -144,7 +153,7 @@ function createServer(terminalManager: TerminalManager, workspaceRegistry?: Work
     createStub<AgentManager>(agentManager),
     createStub<AgentStorage>({}),
     createStub<DownloadTokenStore>({}),
-    "/tmp/paseo-test",
+    home,
     createStub<DaemonConfigStore>(daemonConfigStore),
     null,
     { allowedOrigins: new Set() },
@@ -204,6 +213,7 @@ function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true)
     session: {
       delivery,
       wantsSourceNotification: () => true,
+      wantsSourceEvent: () => false,
       getClientActivity: vi.fn(() => null),
       subscribesToTerminalDirectory: vi.fn(async () => subscribed),
     },
@@ -214,6 +224,22 @@ function connectClient(server: VoiceAssistantWebSocketServer, subscribed = true)
     externalDisconnectCleanupTimeout: null,
   });
   return ws;
+}
+
+// Makes the connected test client count as present (recent activity, app visible).
+function presentClient(server: VoiceAssistantWebSocketServer) {
+  const sessions = asInternals<{ sessions: Map<unknown, { session: Record<string, unknown> }> }>(
+    server,
+  ).sessions;
+  for (const connection of sessions.values()) {
+    connection.session.getClientActivity = vi.fn(() => ({
+      deviceType: "web",
+      appVisible: true,
+      focusedAgentId: null,
+      focusedTerminalId: null,
+      lastActivityAt: new Date(),
+    }));
+  }
 }
 
 function sentTerminalAttentionMessages(ws: ReturnType<typeof createOpenSocket>) {
@@ -298,7 +324,7 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     await flushAsync();
 
     expectNoTerminalAttentionMessage(ws);
-    expect(pushNotifications.sent).toHaveLength(1);
+    expect(pushNotifications.sent).toHaveLength(0);
   });
 
   it("broadcasts terminal_attention_required after working -> idle", async () => {
@@ -475,13 +501,12 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
     expect(payload.title).toBe("Terminal needs input");
   });
 
-  it("sends push notification when no clients are present", async () => {
+  it("never pushes for a finished terminal, even with no clients present", async () => {
     const { manager, emit } = createTerminalManager();
     const { pushNotifications } = createServer(
       manager,
       createWorkspaceRegistry([workspaceRecord()]),
     );
-    // No connected clients
 
     emit(
       transition({
@@ -494,12 +519,152 @@ describe("VoiceAssistantWebSocketServer terminal attention notifications", () =>
 
     await flushAsync();
 
+    expect(pushNotifications.sent).toEqual([]);
+  });
+
+  it("never notifies in-app for a finished terminal, even for a present client", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { server } = createServer(manager);
+    const ws = connectClient(server);
+    presentClient(server);
+
+    emit(
+      transition({
+        previousState: "working",
+        previousChangedAt: 1000,
+        state: "idle",
+        changedAt: 11001,
+      }),
+    );
+    await flushAsync();
+
+    expect(readTerminalAttentionMessage(ws).shouldNotify).toBe(false);
+  });
+});
+
+describe("VoiceAssistantWebSocketServer terminal needs_input tiering", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function createHomedServer(manager: TerminalManager) {
+    const dir = mkdtempSync(join(tmpdir(), "paseo-terminal-attention-"));
+    dirs.push(dir);
+    const created = createServer(manager, undefined, dir);
+    return {
+      ...created,
+      dir,
+      focus: asInternals<{ attentionFocus: AttentionFocus }>(created.server).attentionFocus,
+    };
+  }
+
+  function readLog(dir: string): Array<Record<string, unknown>> {
+    return readFileSync(join(dir, "attention-log.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  const needsInput = transition({
+    previousState: "working",
+    previousChangedAt: 1000,
+    state: "attention",
+    changedAt: 15000,
+  });
+
+  it("notifies the present client in-app, without a push, and logs it", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { server, pushNotifications, dir } = createHomedServer(manager);
+    const ws = connectClient(server);
+    presentClient(server);
+
+    emit(needsInput);
+    await flushAsync();
+
+    expect(readTerminalAttentionMessage(ws).shouldNotify).toBe(true);
+    expect(pushNotifications.sent).toEqual([]);
+    expect(readLog(dir)).toEqual([
+      expect.objectContaining({
+        kind: "attention",
+        terminalId: "term-1",
+        workspaceId: "ws-1",
+        reason: "permission",
+        tier: "caution",
+        delivery: "in_app",
+      }),
+    ]);
+    expect(readLog(dir)[0]).not.toHaveProperty("agentId");
+  });
+
+  it("pushes silently (caution tier) when no client is present", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { pushNotifications, dir } = createHomedServer(manager);
+
+    emit(needsInput);
+    await flushAsync();
+
     expect(pushNotifications.sent).toHaveLength(1);
-    expect(pushNotifications.sent[0]?.title).toBe("Terminal finished");
-    expect(pushNotifications.sent[0]?.data).toMatchObject({
-      serverId: "srv-test",
-      terminalId: "term-1",
-      workspaceId: "ws-1",
+    expect(pushNotifications.sent[0]).toMatchObject({
+      title: "Terminal needs input",
+      tier: "caution",
+      data: { terminalId: "term-1" },
+    });
+    expect(readLog(dir)[0]).toMatchObject({ delivery: "push" });
+  });
+
+  it("is held during focus: no notify, no push, counted, logged as held", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { server, pushNotifications, dir, focus } = createHomedServer(manager);
+    const ws = connectClient(server);
+    presentClient(server);
+    focus.set(25 * 60_000);
+
+    emit(needsInput);
+    await flushAsync();
+
+    expect(readTerminalAttentionMessage(ws).shouldNotify).toBe(false);
+    expect(pushNotifications.sent).toEqual([]);
+    expect(focus.getState().heldCount).toBe(1);
+    expect(readLog(dir)[0]).toMatchObject({ terminalId: "term-1", delivery: "held" });
+    focus.dispose();
+  });
+
+  it("does not log or hold a finished terminal", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { dir, focus } = createHomedServer(manager);
+    focus.set(25 * 60_000);
+
+    emit(
+      transition({
+        previousState: "working",
+        previousChangedAt: 1000,
+        state: "idle",
+        changedAt: 11001,
+      }),
+    );
+    await flushAsync();
+
+    expect(focus.getState().heldCount).toBe(0);
+    expect(() => readLog(dir)).toThrow();
+    focus.dispose();
+  });
+
+  it("pushes one summary naming the terminal when focus ends", async () => {
+    const { manager, emit } = createTerminalManager();
+    const { pushNotifications, focus } = createHomedServer(manager);
+    focus.set(25 * 60_000);
+    emit(needsInput);
+    await flushAsync();
+
+    focus.set(null);
+    await vi.waitFor(() => expect(pushNotifications.sent).toHaveLength(1));
+
+    expect(pushNotifications.sent[0]).toMatchObject({
+      title: "Focus ended: 1 session needs you",
+      body: "bash",
+      tier: "caution",
+      data: { terminalId: "term-1" },
     });
   });
 });

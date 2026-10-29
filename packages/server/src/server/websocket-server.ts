@@ -84,6 +84,7 @@ import type { VoiceCallerContext, VoiceSpeakHandler } from "./voice-types.js";
 import {
   computeNotificationPlan,
   attentionTier,
+  terminalAttentionTier,
   isPushEligibleAttentionReason,
   type AttentionTier,
   type ClientPresenceState,
@@ -91,6 +92,7 @@ import {
 } from "./agent-attention-policy.js";
 import { AttentionCalendar } from "./attention-calendar.js";
 import { AttentionLog, attentionDelivery } from "./attention-log.js";
+import { AttentionFocusForwarder } from "./attention-focus-forwarder.js";
 import { AttentionFocus, buildFocusSummary, type HeldAttentionEntry } from "./attention-focus.js";
 import {
   buildAgentAttentionNotificationPayload,
@@ -580,6 +582,9 @@ export class VoiceAssistantWebSocketServer {
   private readonly paseoHome: string;
   private readonly attentionFocus: AttentionFocus;
   private readonly attentionLog: AttentionLog;
+  private readonly attentionFocusForwarder: AttentionFocusForwarder;
+  // True while a focus change that arrived from another daemon is being applied.
+  private applyingForwardedFocus = false;
   private readonly attentionCalendar: AttentionCalendar;
   private readonly connectedHosts: ConnectedHosts;
 
@@ -816,10 +821,20 @@ export class VoiceAssistantWebSocketServer {
       filePath: join(paseoHome, "attention-log.jsonl"),
       logger: this.logger.child({ module: "attention-log" }),
     });
+    this.attentionFocusForwarder = new AttentionFocusForwarder({
+      hosts: this.connectedHosts,
+      getState: () => this.attentionFocus.getState(),
+      logger: this.logger.child({ module: "attention-focus-forwarder" }),
+    });
     this.attentionFocus = new AttentionFocus({
       filePath: join(paseoHome, "focus.json"),
       logger: this.logger.child({ module: "attention-focus" }),
-      onChange: () => this.broadcastCapabilitiesUpdate(),
+      onChange: (state) => {
+        this.broadcastCapabilitiesUpdate();
+        this.attentionFocusForwarder.onFocusChange(state, {
+          forwarded: this.applyingForwardedFocus,
+        });
+      },
       onEnded: (held) => {
         void this.deliverFocusSummary(held).catch((err) => {
           this.logger.warn({ err }, "Failed to deliver focus summary");
@@ -1173,6 +1188,7 @@ export class VoiceAssistantWebSocketServer {
     await this.connectedHosts.close();
     this.attentionCalendar.dispose();
     this.attentionFocus.dispose();
+    this.attentionFocusForwarder.dispose();
     this.unsubscribeSpeechReadiness?.();
     this.unsubscribeSpeechReadiness = null;
     this.unsubscribeDaemonConfigChange?.();
@@ -1616,7 +1632,16 @@ export class VoiceAssistantWebSocketServer {
       appVersion: options.appVersion,
       clientCapabilities: options.clientCapabilities,
       permissions: options.permissions,
-      attentionFocus: { set: (durationMs) => this.attentionFocus.set(durationMs) },
+      attentionFocus: {
+        set: (durationMs, focusOptions) => {
+          this.applyingForwardedFocus = focusOptions?.forwarded === true;
+          try {
+            return this.attentionFocus.set(durationMs);
+          } finally {
+            this.applyingForwardedFocus = false;
+          }
+        },
+      },
       onMessage: options.onMessage,
       onMessageToSource: options.onMessageToSource,
       onBinaryMessage: options.onBinaryMessage,
@@ -2918,17 +2943,22 @@ export class VoiceAssistantWebSocketServer {
   // One summary for everything focus held, routed like a Caution attention event.
   private async deliverFocusSummary(held: readonly HeldAttentionEntry[]): Promise<void> {
     const target = held
-      .map((entry) => ({ entry, agent: this.agentManager.getAgent(entry.agentId) }))
+      .map((entry) => ({
+        entry,
+        agent: entry.agentId === undefined ? null : this.agentManager.getAgent(entry.agentId),
+      }))
       .find((candidate) => candidate.agent?.workspaceId);
     const agent = target?.agent;
-    if (!target || !agent?.workspaceId) {
+    const targetAgentId = target?.entry.agentId;
+    if (!target || !agent?.workspaceId || targetAgentId === undefined) {
       // No held agent is loaded (for example, focus expired while the daemon was down), so there
       // is no client list to route through; push it.
       const first = held[0];
       if (!first) return;
       const summary = buildFocusSummary(held);
       this.attentionLog.recordFocusSummary({
-        agentId: first.agentId,
+        ...(first.agentId !== undefined ? { agentId: first.agentId } : {}),
+        ...(first.terminalId !== undefined ? { terminalId: first.terminalId } : {}),
         workspaceId: "unknown",
         provider: "unknown",
         reason: first.reason,
@@ -2941,7 +2971,12 @@ export class VoiceAssistantWebSocketServer {
         title: summary.title,
         body: summary.body,
         tier: "caution",
-        data: { serverId: this.serverId, agentId: first.agentId, reason: first.reason },
+        data: {
+          serverId: this.serverId,
+          ...(first.agentId !== undefined ? { agentId: first.agentId } : {}),
+          ...(first.terminalId !== undefined ? { terminalId: first.terminalId } : {}),
+          reason: first.reason,
+        },
       });
       return;
     }
@@ -2967,7 +3002,7 @@ export class VoiceAssistantWebSocketServer {
       data: {
         serverId: this.serverId,
         workspaceId: agent.workspaceId,
-        agentId: target.entry.agentId,
+        agentId: targetAgentId,
         reason: target.entry.reason,
       },
     };
@@ -2978,7 +3013,7 @@ export class VoiceAssistantWebSocketServer {
       nowMs: Date.now(),
     });
     this.attentionLog.recordFocusSummary({
-      agentId: target.entry.agentId,
+      agentId: targetAgentId,
       workspaceId: agent.workspaceId,
       provider: agent.provider,
       reason: target.entry.reason,
@@ -2993,7 +3028,7 @@ export class VoiceAssistantWebSocketServer {
       heldCount: held.length,
     });
     this.sendAgentAttention({
-      agentId: target.entry.agentId,
+      agentId: targetAgentId,
       provider: agent.provider,
       reason: target.entry.reason,
       awaitingInput: target.entry.awaitingInput,
@@ -3109,21 +3144,51 @@ export class VoiceAssistantWebSocketServer {
     const nowMs = Date.now();
     const workspaceId = params.workspaceId;
 
-    const plan = computeNotificationPlan({
-      allStates,
-      focusTarget: { kind: "terminal", id: params.terminalId },
-      pushEligible: true,
-      nowMs,
-    });
-
     const title = terminalAttentionTitle(params.reason);
     const body = params.terminalName;
+    const tier = terminalAttentionTier(params.reason);
+
+    // Same rules as agents: a finished terminal is advisory (state only), one blocked on the
+    // user is Caution and is held during focus.
+    const held = tier === "caution" && this.attentionFocus.isActive();
+    if (held) {
+      this.attentionFocus.hold({
+        terminalId: params.terminalId,
+        title: params.terminalName,
+        reason: "permission",
+        awaitingInput: true,
+        at: new Date(nowMs).toISOString(),
+      });
+    }
+
+    const plan: NotificationPlan =
+      held || tier === "advisory"
+        ? { inAppRecipientIndex: null, shouldPush: false }
+        : computeNotificationPlan({
+            allStates,
+            focusTarget: { kind: "terminal", id: params.terminalId },
+            pushEligible: true,
+            nowMs,
+          });
+
+    if (tier !== "advisory") {
+      this.attentionLog.recordAttention({
+        terminalId: params.terminalId,
+        workspaceId: workspaceId ?? "unknown",
+        provider: "terminal",
+        reason: "permission",
+        awaitingInput: true,
+        tier,
+        delivery: attentionDelivery({ tier, held, plan, recipientCount: allStates.length }),
+      });
+    }
 
     if (plan.shouldPush) {
       void this.pushNotificationSender
         .send({
           title,
           body,
+          tier,
           data: {
             serverId: this.serverId,
             terminalId: params.terminalId,

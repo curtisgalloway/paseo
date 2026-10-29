@@ -42,6 +42,12 @@ interface Live {
   accepted: boolean;
   stop(): void;
 }
+/** An online host whose identity and capabilities have been accepted. */
+export interface AcceptedHost {
+  registrationId: string;
+  serverId: string;
+  client: DaemonClient;
+}
 interface Route {
   registrationId: string;
   close(code?: string, message?: string): void;
@@ -54,6 +60,7 @@ export class ConnectedHosts {
   private readonly live = new Map<string, Live>();
   private readonly routes = new Set<Route>();
   private readonly listeners = new Set<() => void>();
+  private readonly acceptedListeners = new Set<(host: AcceptedHost) => void>();
   private queue: Promise<unknown> = Promise.resolve();
   private readonly ready: Promise<void>;
   private closed = false;
@@ -90,6 +97,25 @@ export class ConnectedHosts {
   observe(changed: () => void): () => void {
     this.listeners.add(changed);
     return () => this.listeners.delete(changed);
+  }
+  /** Online hosts with a live accepted link. */
+  acceptedHosts(): AcceptedHost[] {
+    const hosts: AcceptedHost[] = [];
+    for (const row of this.rows) {
+      const live = this.live.get(row.registrationId);
+      if (row.serverId && row.status === "online" && live?.accepted && live.client.isConnected)
+        hosts.push({
+          registrationId: row.registrationId,
+          serverId: row.serverId,
+          client: live.client,
+        });
+    }
+    return hosts;
+  }
+  /** Fires each time a host link is accepted, including every reconnect. */
+  onHostAccepted(listener: (host: AcceptedHost) => void): () => void {
+    this.acceptedListeners.add(listener);
+    return () => this.acceptedListeners.delete(listener);
   }
   private changed(): void {
     for (const listener of this.listeners) listener();
@@ -303,6 +329,13 @@ export class ConnectedHosts {
           Object.assign(row, next);
           live.accepted = true;
           this.changed();
+          for (const listener of this.acceptedListeners) {
+            try {
+              listener({ registrationId: row.registrationId, serverId: info.serverId, client });
+            } catch {
+              // A listener must never fail the host link.
+            }
+          }
         });
       } catch (error) {
         if (stopped) return;
@@ -523,6 +556,7 @@ export class ConnectedHosts {
     for (const id of this.live.keys()) this.stop(id);
     for (const route of this.routes) route.close();
     this.listeners.clear();
+    this.acceptedListeners.clear();
   }
 }
 

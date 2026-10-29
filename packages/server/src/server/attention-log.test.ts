@@ -64,6 +64,25 @@ describe("AttentionLog", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("logs a terminal event with terminalId and no agentId", () => {
+    const log = create();
+    const { agentId: _agentId, ...terminal } = event({
+      reason: "permission",
+      provider: "terminal",
+    });
+    log.recordAttention({ ...terminal, terminalId: "term-1" });
+    log.recordActed("term-1");
+
+    expect(lines()).toHaveLength(1);
+    expect(lines()[0]).toMatchObject({
+      kind: "attention",
+      terminalId: "term-1",
+      reason: "permission",
+      provider: "terminal",
+    });
+    expect(lines()[0]).not.toHaveProperty("agentId");
+  });
+
   it("writes an event line for each delivery value, mode 600", () => {
     const log = create();
     const deliveries: AttentionDelivery[] = [

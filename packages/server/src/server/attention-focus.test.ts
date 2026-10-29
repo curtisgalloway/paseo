@@ -47,6 +47,15 @@ describe("AttentionFocus", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("counts an agent and a terminal with the same id separately", () => {
+    const focus = create();
+    focus.start();
+    focus.set(25 * MINUTE);
+    focus.hold(entry("x"));
+    focus.hold({ ...entry("x"), agentId: undefined, terminalId: "x" });
+    expect(focus.getState().heldCount).toBe(2);
+  });
+
   it("starts inactive", () => {
     const focus = create();
     focus.start();
@@ -191,6 +200,23 @@ describe("AttentionFocus", () => {
 });
 
 describe("buildFocusSummary", () => {
+  it("names terminals as sessions", () => {
+    const terminal: HeldAttentionEntry = {
+      terminalId: "term-1",
+      title: "bash",
+      reason: "permission",
+      awaitingInput: true,
+      at: new Date().toISOString(),
+    };
+    expect(buildFocusSummary([terminal])).toEqual({
+      title: "Focus ended: 1 session needs you",
+      body: "bash",
+    });
+    expect(buildFocusSummary([terminal, entry("a", "Alpha")]).title).toBe(
+      "Focus ended: 2 sessions need you",
+    );
+  });
+
   it("names the held agents", () => {
     expect(buildFocusSummary([entry("a", "Alpha")])).toEqual({
       title: "Focus ended: 1 agent needs you",

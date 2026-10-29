@@ -25,7 +25,9 @@ export function attentionDelivery(input: {
 }
 
 export interface AttentionLogEvent {
-  agentId: string;
+  // Exactly one of agentId / terminalId.
+  agentId?: string;
+  terminalId?: string;
   workspaceId: string;
   provider: string;
   reason: AgentAttentionReason;
@@ -61,7 +63,8 @@ export class AttentionLog {
   recordAttention(event: AttentionLogEvent): void {
     const at = this.now();
     this.append({ schemaVersion: 1, kind: "attention", at: new Date(at).toISOString(), ...event });
-    this.unmatched.set(event.agentId, at);
+    // Terminal attention has no "acted" matching yet, so it is not tracked.
+    if (event.agentId !== undefined) this.unmatched.set(event.agentId, at);
   }
 
   recordFocusSummary(event: AttentionLogEvent & { heldCount: number }): void {

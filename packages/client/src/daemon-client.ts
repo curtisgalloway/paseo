@@ -5463,6 +5463,7 @@ export class DaemonClient {
   async setAttentionFocus(
     durationMs: number | null,
     requestId?: string,
+    options?: { forwarded?: boolean },
   ): Promise<AttentionFocusSetResponse["payload"]> {
     // COMPAT(attentionFocus): added after v0.13.2, remove gate once the daemon floor includes it.
     if (this.lastServerInfoMessage?.features?.attentionFocus !== true) {
@@ -5471,7 +5472,11 @@ export class DaemonClient {
     const payload =
       await this.sendNamespacedCorrelatedSessionRequest<"attention.focus.set.response">({
         requestId,
-        message: { type: "attention.focus.set.request", durationMs },
+        message: {
+          type: "attention.focus.set.request",
+          durationMs,
+          ...(options?.forwarded ? { forwarded: true } : {}),
+        },
       });
     if (payload.error) throw new Error(payload.error);
     return payload;

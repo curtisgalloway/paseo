@@ -1430,6 +1430,9 @@ export const AttentionFocusSetRequestSchema = z.object({
   requestId: z.string(),
   // Milliseconds until focus ends, or null to end it now. The daemon accepts up to 8 hours.
   durationMs: z.number().nullable(),
+  // Set by a hub daemon relaying its own focus to a connected host. The receiver applies it
+  // but does not relay it onward, so focus can never loop between daemons.
+  forwarded: z.boolean().optional(),
 });
 
 export const HubManagementDaemonConnectRequestSchema = z.object({

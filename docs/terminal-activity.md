@@ -30,7 +30,7 @@ Terminal directory snapshots (`terminalsChanged`) and workspace contribution cha
 
 Each `onChange` delivers both the new snapshot and the `previous` one (`{ state, changedAt }`). The transition flows unchanged up through `TerminalSession.onActivityChange` (as `{ activity, previous }`), the worker protocol's `terminalActivityChange` event, and the manager-level `subscribeTerminalActivity(listener)` stream (`{ terminalId, name, cwd, activity, previous }`).
 
-The daemon consumes these transitions, not snapshots. When a transition moves from `working` to `idle`, the tracker records finished attention, so the terminal shows the same green finished dot as an idle agent that needs review. The websocket layer also fires a "Terminal finished" attention notification. A terminal that exits while still working emits no turn-end notification.
+The daemon consumes these transitions, not snapshots. When a transition moves from `working` to `idle`, the tracker records finished attention, so the terminal shows the same green finished dot as an idle agent that needs review. The websocket layer raises terminal attention for it, but a finished terminal is advisory and never notifies. A terminal that exits while still working emits no turn-end notification.
 
 Terminal list visibility is `workspaceId`-scoped: a terminal belongs to the workspace that created it, and same-`cwd` sibling workspaces do not see it in their terminal lists. Terminal status routing starts from that owning workspace, uses the owning workspace's `cwd`, then fans the status bucket out to every active workspace with the same `cwd`.
 
@@ -50,8 +50,19 @@ The generated shell command uses `PASEO_HOOK_CLI` to run the current CLI. `paseo
 Claude hook mapping:
 
 - `UserPromptSubmit` → `running`
-- `Stop`, `StopFailure`, `SessionEnd` → `idle`
-- `Notification` with `notification_type` equal to `idle_prompt` → `needs-input`
+- `StopFailure`, `SessionEnd` → `idle`
+- `Stop` → `needs-input` when the last assistant message ends with a question to the user
+  (`endsWithQuestionToUser`, the same classifier agents use), otherwise `idle`. The message comes
+  from the hook input's `last_assistant_message`, or the tail (256 KB) of `transcript_path`; any
+  read or parse failure reports `idle`.
+- `Notification` with `notification_type` `permission_prompt` or `elicitation_dialog` → `needs-input`.
+  `idle_prompt` is ignored: it fires about a minute after every finished turn.
+
+Terminal attention follows the same tiers as agents. A finished terminal (working → idle) is
+advisory: the row state updates and nothing notifies or pushes. `needs_input` is Caution: in-app to
+the most recently active present client (unless focused on that terminal), a silent push when away,
+held during a focus period (counted in the focus summary), and written to the interruption log with
+`terminalId` and `reason: "permission"`.
 
 Claude does not run `Stop` when the user interrupts a turn. A standalone Ctrl-C or Escape input
 while terminal activity is working clears the activity without finished attention. The same

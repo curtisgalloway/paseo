@@ -94,3 +94,8 @@ export function isPushEligibleAttentionReason(input: {
 }): boolean {
   return attentionTier(input) !== "advisory";
 }
+
+// A finished terminal session is advisory (state only); one blocked on the user is Caution.
+export function terminalAttentionTier(reason: "finished" | "needs_input"): AttentionTier {
+  return reason === "needs_input" ? "caution" : "advisory";
+}

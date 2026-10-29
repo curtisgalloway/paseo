@@ -9,7 +9,9 @@ const SUMMARY_TITLE_LIMIT = 5;
 const MAX_DISMISSED_CALENDAR_KEYS = 50;
 
 export interface HeldAttentionEntry {
-  agentId: string;
+  // Exactly one of agentId / terminalId identifies what is waiting.
+  agentId?: string;
+  terminalId?: string;
   title: string | null;
   reason: AgentAttentionReason;
   awaitingInput: boolean;
@@ -149,9 +151,10 @@ export class AttentionFocus {
     this.options.onChange(this.getState());
   }
 
-  // Records a held Caution event. Latest entry per agent wins.
+  // Records a held Caution event. Latest entry per agent or terminal wins.
   hold(entry: HeldAttentionEntry): void {
-    this.held = [...this.held.filter((held) => held.agentId !== entry.agentId), entry];
+    const key = heldKey(entry);
+    this.held = [...this.held.filter((held) => heldKey(held) !== key), entry];
     this.persist();
     this.options.onChange(this.getState());
   }
@@ -237,17 +240,29 @@ export class AttentionFocus {
   }
 }
 
+function heldKey(entry: HeldAttentionEntry): string {
+  return entry.agentId !== undefined ? `agent:${entry.agentId}` : `terminal:${entry.terminalId}`;
+}
+
 export function buildFocusSummary(held: readonly HeldAttentionEntry[]): {
   title: string;
   body: string;
 } {
   const count = held.length;
-  const names = held.map((entry) => entry.title?.trim() || "Untitled agent");
+  const names = held.map(
+    (entry) =>
+      entry.title?.trim() || (entry.agentId === undefined ? "Untitled terminal" : "Untitled agent"),
+  );
   const shown = names.slice(0, SUMMARY_TITLE_LIMIT);
   const extra = names.length - shown.length;
   const body = extra > 0 ? `${shown.join(", ")} and ${extra} more` : shown.join(", ");
   return {
-    title: `Focus ended: ${count} ${count === 1 ? "agent needs" : "agents need"} you`,
+    title: `Focus ended: ${count} ${noun(held, count)} you`,
     body,
   };
+}
+
+function noun(held: readonly HeldAttentionEntry[], count: number): string {
+  const word = held.every((entry) => entry.agentId !== undefined) ? "agent" : "session";
+  return count === 1 ? `${word} needs` : `${word}s need`;
 }

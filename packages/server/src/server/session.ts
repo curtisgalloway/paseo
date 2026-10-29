@@ -525,7 +525,10 @@ export interface SessionOptions {
   };
   orchestrationSkills?: import("./orchestration-skills/index.js").OrchestrationSkills;
   attentionFocus?: {
-    set(durationMs: number | null): import("@getpaseo/protocol/messages").AttentionFocusState;
+    set(
+      durationMs: number | null,
+      options?: { forwarded?: boolean },
+    ): import("@getpaseo/protocol/messages").AttentionFocusState;
   };
   mcpBaseUrl?: string | null;
   stt: Resolvable<SpeechToTextProvider | null>;
@@ -2307,7 +2310,7 @@ export class Session {
   ): void {
     try {
       if (!this.attentionFocus) throw new Error("Focus periods are unavailable");
-      const focus = this.attentionFocus.set(msg.durationMs);
+      const focus = this.attentionFocus.set(msg.durationMs, { forwarded: msg.forwarded === true });
       this.emit({
         type: "attention.focus.set.response",
         payload: { requestId: msg.requestId, focus, error: null },

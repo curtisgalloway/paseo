@@ -191,14 +191,15 @@ export function createHostTransportFactory(
 }
 export function createHostClient(
   connection: string,
-  config: Omit<DaemonClientConfig, "url" | "transportFactory">,
+  config: Omit<DaemonClientConfig, "url">,
   budget?: HostTransportBudget,
 ): DaemonClient {
   const target = parseHostTarget(connection);
+  const { transportFactory, ...clientConfig } = config;
   return new DaemonClient({
-    ...config,
+    ...clientConfig,
     url: "ws://host-connector/ws",
     ...(target.password ? { password: target.password } : {}),
-    transportFactory: createHostTransportFactory(connection, budget),
+    transportFactory: transportFactory ?? createHostTransportFactory(connection, budget),
   });
 }

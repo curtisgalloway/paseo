@@ -498,6 +498,11 @@ function errorToMessageString(error: unknown): string {
   return "";
 }
 
+// Claude's own text names the failure but not the fix, and an agent run by the daemon has no
+// terminal where the user could log in.
+const CLAUDE_LOGIN_HINT =
+  "\n\nRun `/login` in Claude Code in a terminal on the machine running this agent, then resend your message.";
+
 /**
  * Claude opens every main-session turn with system/init and closes it with exactly one result:
  * a prompt, a wake-up after background work, a slash command, an API error. Background subagents
@@ -4498,6 +4503,7 @@ class ClaudeAgentSession implements AgentSession {
         for (const item of timelineItems) {
           events.push({ type: "timeline", item, provider: "claude" });
         }
+        this.appendLoginHintEvent(message, events);
         this.appendSidechainResultEvents(message, events);
         break;
       }
@@ -4523,6 +4529,18 @@ class ClaudeAgentSession implements AgentSession {
     if (!lifecycle || lifecycle.state === "queued") return;
     this.unstartedMessageUuids.delete(lifecycle.commandUuid);
     this.permissionClearingSteerUuids.delete(lifecycle.commandUuid);
+  }
+
+  private appendLoginHintEvent(
+    message: Extract<SDKMessage, { type: "assistant" }>,
+    events: AgentStreamEvent[],
+  ): void {
+    if (message.error !== "authentication_failed") return;
+    events.push({
+      type: "timeline",
+      provider: "claude",
+      item: { type: "assistant_message", text: CLAUDE_LOGIN_HINT },
+    });
   }
 
   private appendTaskStateEvent(message: SDKMessage, events: AgentStreamEvent[]): void {

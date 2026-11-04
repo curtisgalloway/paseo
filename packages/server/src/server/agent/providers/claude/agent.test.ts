@@ -1194,6 +1194,56 @@ describe("ClaudeAgentSession features", () => {
     }
   });
 
+  describe("Claude assistant errors", () => {
+    async function translateAssistantError(error: string): Promise<string[]> {
+      const { queryFactory } = createQueryMock();
+      const client = new ClaudeAgentClient({
+        logger,
+        queryFactory,
+        resolveBinary: async () => "/test/claude/bin",
+      });
+      const session = await client.createSession({ provider: "claude", cwd: process.cwd() });
+      const internal = session as unknown as {
+        translateMessageToEvents(message: SDKMessage): AgentStreamEvent[];
+      };
+      try {
+        const events = internal.translateMessageToEvents({
+          type: "assistant",
+          error,
+          parent_tool_use_id: null,
+          uuid: "assistant-error",
+          session_id: "session-1",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "Failed to authenticate: OAuth session expired" }],
+          },
+        } as unknown as SDKMessage);
+        return events.flatMap((event) =>
+          event.type === "timeline" && event.item.type === "assistant_message"
+            ? [event.item.text]
+            : [],
+        );
+      } finally {
+        await session.close();
+      }
+    }
+
+    test("tells the user to log in again when authentication fails", async () => {
+      const texts = await translateAssistantError("authentication_failed");
+
+      expect(texts).toEqual([
+        "Failed to authenticate: OAuth session expired",
+        "\n\nRun `/login` in Claude Code in a terminal on the machine running this agent, then resend your message.",
+      ]);
+    });
+
+    test("adds no login hint to other errors", async () => {
+      const texts = await translateAssistantError("rate_limit");
+
+      expect(texts).toEqual(["Failed to authenticate: OAuth session expired"]);
+    });
+  });
+
   test("a human steer supersedes blocking permissions until Claude reads it", async () => {
     const { queryFactory } = createQueryMock();
     const client = new ClaudeAgentClient({
